@@ -1714,6 +1714,24 @@ input.input:focus {
   50%      { box-shadow: 0 0 18px var(--ok-glow); }
 }
 
+/* alert buttons: red-armed bottom edge */
+.icon-btn--alert {
+  border-bottom: 2px solid var(--alert);
+}
+.icon-btn--alert:hover:not(:disabled) {
+  border-color: var(--alert);
+  box-shadow: 0 0 10px rgba(255, 51, 68, 0.25), inset 0 0 0 1px var(--phosphor-soft);
+}
+.icon-btn--alert:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.icon-btn--alert > span {
+  font-family: var(--mono);
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1;
+}
+
 /* ─────────────────────────────────────────────────────────────────
    Payload tray — staged attachments awaiting transmit. Renders as a
    munitions rack docked to the top of the input frame: a stencil tag,
@@ -2239,6 +2257,59 @@ input.input:focus {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   Shock window overlay (ring/siren)
+   ───────────────────────────────────────────────────────────────── */
+
+.shock {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 3, 2, 0.62);
+  backdrop-filter: blur(1px);
+  animation: shock-in 0.12s ease-out both, shock-flicker 0.9s steps(2) infinite;
+}
+.shock--siren {
+  background: rgba(10, 0, 0, 0.55);
+}
+.shock-frame {
+  width: min(560px, 92vw);
+  border: 2px solid var(--alert);
+  background: rgba(2, 3, 2, 0.88);
+  box-shadow: 0 0 28px rgba(255, 51, 68, 0.18);
+  padding: 22px 18px 18px;
+  text-align: center;
+}
+.shock-title {
+  font-family: var(--stencil-font);
+  font-weight: 900;
+  letter-spacing: 0.32em;
+  color: var(--alert);
+  font-size: 1.3rem;
+  text-transform: uppercase;
+}
+.shock-sub {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--phosphor);
+  text-transform: uppercase;
+  font-size: 0.82rem;
+}
+
+@keyframes shock-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes shock-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.88; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
    Side panel: VIS-RELAY screen-share monitor
    ───────────────────────────────────────────────────────────────── */
 
@@ -2565,5 +2636,43 @@ input.input:focus {
   *::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Rumble: brief screen shake for failures / alerts
+   ───────────────────────────────────────────────────────────────── */
+
+.shell.rumble {
+  animation: rumble 340ms linear both;
+}
+
+@keyframes rumble {
+  0% { transform: translate3d(0, 0, 0); }
+  12% { transform: translate3d(-2px, 1px, 0); }
+  24% { transform: translate3d(2px, -1px, 0); }
+  38% { transform: translate3d(-3px, 0, 0); }
+  52% { transform: translate3d(3px, 1px, 0); }
+  66% { transform: translate3d(-2px, -1px, 0); }
+  80% { transform: translate3d(2px, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   TX animation: subtle pulse while sending
+   ───────────────────────────────────────────────────────────────── */
+
+.composer.is-sending {
+  animation: tx-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes tx-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(34, 255, 119, 0);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(34, 255, 119, 0.12);
+    filter: brightness(1.06);
   }
 }
