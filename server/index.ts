@@ -1,5 +1,5 @@
 import path from "node:path";
-import fs, { createReadStream } from "node:fs";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import os from "node:os";
@@ -26,7 +26,6 @@ function resolveProjectRoot(): string {
 const PROJECT_ROOT = resolveProjectRoot();
 loadEnv({ path: path.join(PROJECT_ROOT, ".env") });
 
-const DATA_DIR = process.env.HELLES_DATA_DIR ?? path.join(PROJECT_ROOT, "data");
 const PORT = Number(process.env.HELLES_PORT ?? 3847);
 const HOST = process.env.HELLES_HOST ?? "0.0.0.0";
 const MAX_UPLOAD_MB = Number(process.env.HELLES_MAX_UPLOAD_MB ?? 200);
@@ -44,13 +43,235 @@ type OutMsg = {
   createdAt: number;
 };
 
-const clients = new Set<{ ws: WebSocket; label: string }>();
+type Client = { ws: WebSocket; label: string; connId: string };
+const clients = new Set<Client>();
+let currentSharer: string | null = null;
+const lastAlertAt = new Map<string, number>();
+
+type LinkPreview = {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  error?: string;
+};
+
+const previewCache = new Map<string, { data: LinkPreview; exp: number }>();
+const PREVIEW_TTL_MS = 30 * 60 * 1000;
+const PREVIEW_TIMEOUT_MS = 5_000;
+const PREVIEW_MAX_BYTES = 512 * 1024;
+// Identify as a link-preview bot. Reddit, Cloudflare-fronted sites, and
+// many news outlets have allowlists for well-known preview-bot UAs
+// (facebookexternalhit, Slackbot-LinkExpanding, Twitterbot, Discordbot)
+// because these are explicitly *expected* to scrape head metadata only.
+// Spoofing a browser UA usually fails further fingerprint checks (TLS JA3,
+// Sec-Fetch headers, IP reputation), but appending the well-known
+// facebookexternalhit token makes us pass the typical OG allowlist.
+const PREVIEW_USER_AGENT =
+  "Mozilla/5.0 (compatible; helles-linkpreview/0.1; +https://github.com/anthropics/claude-code) facebookexternalhit/1.1";
+
+const BOT_BLOCK_TITLE_PATTERNS: RegExp[] = [
+  /please[\s\-_]+wait[\s\-_]+for[\s\-_]+verification/i,
+  /checking[\s\-_]+your[\s\-_]+browser/i,
+  /just\s+a\s+moment/i, // Cloudflare interstitial
+  /one[\s\-_]+more[\s\-_]+step/i,
+  /are[\s\-_]+you[\s\-_]+(?:a\s+)?(?:human|robot)/i,
+  /access\s+denied/i,
+  /attention\s+required/i, // Cloudflare
+  /security\s+check/i,
+  /captcha/i,
+  /bot\s+challenge/i,
+  /verify\s+you\s+are\s+human/i,
+];
+
+function looksLikeBotBlock(title: string | null, description: string | null): boolean {
+  const haystack = `${title ?? ""}\n${description ?? ""}`;
+  return BOT_BLOCK_TITLE_PATTERNS.some((p) => p.test(haystack));
+}
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n) => {
+      const c = Number(n);
+      return Number.isFinite(c) ? String.fromCharCode(c) : "";
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => {
+      const c = parseInt(n, 16);
+      return Number.isFinite(c) ? String.fromCharCode(c) : "";
+    })
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+function findMeta(head: string, key: string, kind: "name" | "property"): string | null {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const a = new RegExp(
+    `<meta\\b[^>]*\\b${kind}\\s*=\\s*["']${escaped}["'][^>]*\\bcontent\\s*=\\s*["']([^"']+)["']`,
+    "i"
+  ).exec(head);
+  if (a?.[1]) return decodeHtmlEntities(a[1]);
+  const b = new RegExp(
+    `<meta\\b[^>]*\\bcontent\\s*=\\s*["']([^"']+)["'][^>]*\\b${kind}\\s*=\\s*["']${escaped}["']`,
+    "i"
+  ).exec(head);
+  return b?.[1] ? decodeHtmlEntities(b[1]) : null;
+}
+
+function clipText(s: string | null, max = 400): string | null {
+  if (!s) return null;
+  const t = s.trim().replace(/\s+/g, " ");
+  return t ? t.slice(0, max) : null;
+}
+
+function parsePreview(url: string, html: string): LinkPreview {
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return { url, title: null, description: null, image: null, siteName: null, error: "bad_url" };
+  }
+  const headEnd = html.indexOf("</head>");
+  const head = headEnd > 0 ? html.slice(0, headEnd + 7) : html.slice(0, 200_000);
+  const titleEl = /<title[^>]*>([^<]+)<\/title>/i.exec(head)?.[1] ?? null;
+  const title =
+    findMeta(head, "og:title", "property") ??
+    findMeta(head, "twitter:title", "name") ??
+    (titleEl ? decodeHtmlEntities(titleEl) : null);
+  const description =
+    findMeta(head, "og:description", "property") ??
+    findMeta(head, "twitter:description", "name") ??
+    findMeta(head, "description", "name");
+  let image =
+    findMeta(head, "og:image:secure_url", "property") ??
+    findMeta(head, "og:image", "property") ??
+    findMeta(head, "twitter:image", "name") ??
+    findMeta(head, "twitter:image:src", "name");
+  if (image && !/^https?:\/\//i.test(image)) {
+    try {
+      image = new URL(image, target).toString();
+    } catch {
+      image = null;
+    }
+  }
+  const siteName =
+    findMeta(head, "og:site_name", "property") ?? target.hostname.replace(/^www\./, "");
+
+  const cleanTitle = clipText(title);
+  const cleanDesc = clipText(description);
+  if (looksLikeBotBlock(cleanTitle, cleanDesc)) {
+    return {
+      url,
+      title: null,
+      description: null,
+      image: null,
+      siteName: clipText(siteName, 80),
+      error: "bot_block",
+    };
+  }
+  return {
+    url,
+    title: cleanTitle,
+    description: cleanDesc,
+    image: image ?? null,
+    siteName: clipText(siteName, 80),
+  };
+}
+
+async function fetchPreview(url: string): Promise<LinkPreview> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PREVIEW_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": PREVIEW_USER_AGENT,
+        Accept: "text/html,application/xhtml+xml;q=0.9",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+      redirect: "follow",
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      return {
+        url,
+        title: null,
+        description: null,
+        image: null,
+        siteName: null,
+        error: `http_${res.status}`,
+      };
+    }
+    const ct = res.headers.get("content-type") ?? "";
+    if (!/text\/html|application\/xhtml/i.test(ct)) {
+      return { url, title: null, description: null, image: null, siteName: null, error: "not_html" };
+    }
+    const reader = res.body?.getReader();
+    if (!reader) {
+      return { url, title: null, description: null, image: null, siteName: null, error: "no_body" };
+    }
+    const decoder = new TextDecoder("utf-8", { fatal: false });
+    let html = "";
+    let read = 0;
+    try {
+      while (read < PREVIEW_MAX_BYTES) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        html += decoder.decode(value, { stream: true });
+        read += value.byteLength;
+        if (html.includes("</head>")) break;
+      }
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {
+        /* ignore */
+      }
+    }
+    return parsePreview(url, html);
+  } catch (e) {
+    return {
+      url,
+      title: null,
+      description: null,
+      image: null,
+      siteName: null,
+      error: e instanceof Error ? e.name : "fetch_failed",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function broadcast(payload: unknown): void {
   const raw = JSON.stringify(payload);
   for (const c of clients) {
     if (c.ws.readyState === 1) c.ws.send(raw);
   }
+}
+
+function broadcastExcept(connId: string, payload: unknown): void {
+  const raw = JSON.stringify(payload);
+  for (const c of clients) {
+    if (c.connId === connId) continue;
+    if (c.ws.readyState === 1) c.ws.send(raw);
+  }
+}
+
+function sendTo(connId: string, payload: unknown): boolean {
+  for (const c of clients) {
+    if (c.connId !== connId) continue;
+    if (c.ws.readyState === 1) {
+      c.ws.send(JSON.stringify(payload));
+      return true;
+    }
+    return false;
+  }
+  return false;
 }
 
 function listLanIpv4Urls(port: number, scheme: string): string[] {
@@ -111,23 +332,17 @@ function loadHttpsOptions(): { key: Buffer; cert: Buffer } | null {
 }
 
 async function main() {
-  const db = getDb(DATA_DIR);
-  const uploadDir = path.join(DATA_DIR, "uploads");
-  fs.mkdirSync(uploadDir, { recursive: true });
+  const db = getDb();
+  // Encrypted upload blobs live only in process memory; never written to disk.
+  const uploads = new Map<string, Buffer>();
 
   const roomKeyRef = { b64u: "" };
 
-  function clearUploadFiles(): void {
-    if (!fs.existsSync(uploadDir)) return;
-    for (const n of fs.readdirSync(uploadDir)) {
-      fs.unlinkSync(path.join(uploadDir, n));
-    }
-  }
-
   function wipeRoom(reason: string): void {
     clearAllMessages(db);
-    clearUploadFiles();
-    roomKeyRef.b64u = roomKeyBase64Url(rotateRoomKey(DATA_DIR));
+    uploads.clear();
+    previewCache.clear();
+    roomKeyRef.b64u = roomKeyBase64Url(rotateRoomKey());
     console.log(`Helles: neuer Chat (${reason}) — Nachrichten und Uploads geleert.`);
   }
 
@@ -204,8 +419,8 @@ async function main() {
 
   app.get("/api/room-key", async () => ({ keyB64u: roomKeyRef.b64u }));
 
-  app.get("/api/me", async (request) => {
-    const label = peerLabel(request);
+  app.get("/api/me", async (request, reply) => {
+    const label = peerLabel(request, reply);
     return { user: { id: label, username: label } };
   });
 
@@ -235,7 +450,7 @@ async function main() {
   });
 
   app.post("/api/messages", async (request, reply) => {
-    const label = peerLabel(request);
+    const label = peerLabel(request, reply);
     const body = request.body as { type?: string; body?: string; meta?: Record<string, unknown> };
     const type = body.type ?? "text";
     const allowed = new Set(["text", "link", "image", "video", "audio", "file"]);
@@ -319,7 +534,7 @@ async function main() {
   });
 
   app.post("/api/upload", async (request, reply) => {
-    const label = peerLabel(request);
+    const label = peerLabel(request, reply);
     let fileBuf: Buffer | null = null;
     let metaJson: string | null = null;
     for await (const part of request.parts()) {
@@ -345,12 +560,10 @@ async function main() {
 
     const stored = nanoid(24);
     const diskName = enc ? `${stored}.bin` : `${stored}${guessExt(mime)}`;
-    const full = path.join(uploadDir, diskName);
-    await fs.promises.writeFile(full, fileBuf);
-    const stat = await fs.promises.stat(full);
+    uploads.set(diskName, fileBuf);
     const id = nanoid();
     const createdAt = Date.now();
-    const metaOut = { ...meta, mime, size: stat.size, diskName, enc: enc ? 1 : 0 };
+    const metaOut = { ...meta, mime, size: fileBuf.length, diskName, enc: enc ? 1 : 0 };
     const bodyLabel = "file";
     db.prepare("INSERT INTO messages (id, sender_label, type, body, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
       id,
@@ -375,28 +588,102 @@ async function main() {
 
   app.get("/api/media/:name", async (request, reply) => {
     const name = path.basename((request.params as { name: string }).name);
-    const full = path.resolve(path.join(uploadDir, name));
-    const base = path.resolve(uploadDir) + path.sep;
-    if (!full.startsWith(base)) return reply.code(400).send();
-    try {
-      await fs.promises.access(full, fs.constants.R_OK);
-    } catch {
-      return reply.code(404).send();
-    }
+    const buf = uploads.get(name);
+    if (!buf) return reply.code(404).send();
     reply.header("Content-Type", "application/octet-stream");
     reply.header("X-Content-Type-Options", "nosniff");
-    return reply.send(createReadStream(full));
+    return reply.send(buf);
+  });
+
+  app.get("/api/preview", async (request, reply) => {
+    const raw = String((request.query as { url?: string }).url ?? "").slice(0, 2048);
+    if (!raw) return reply.code(400).send({ error: "missing_url" });
+    let target: URL;
+    try {
+      target = new URL(raw);
+    } catch {
+      return reply.code(400).send({ error: "bad_url" });
+    }
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      return reply.code(400).send({ error: "bad_scheme" });
+    }
+    const key = target.toString();
+    const cached = previewCache.get(key);
+    if (cached && cached.exp > Date.now()) return cached.data;
+    const data = await fetchPreview(key);
+    previewCache.set(key, { data, exp: Date.now() + PREVIEW_TTL_MS });
+    if (previewCache.size > 500) {
+      const keys = [...previewCache.keys()];
+      for (const k of keys.slice(0, keys.length - 400)) previewCache.delete(k);
+    }
+    return data;
   });
 
   app.register(async (f) => {
     f.get("/ws", { websocket: true }, (socket, req) => {
       cancelRoomReset();
       const label = peerLabel(req);
-      const entry = { ws: socket, label };
+      const connId = nanoid();
+      const entry: Client = { ws: socket, label, connId };
+      const peers = [...clients].map((c) => ({ id: c.connId, label: c.label }));
       clients.add(entry);
-      socket.send(JSON.stringify({ event: "hello", user: { id: label, username: label } }));
+      socket.send(
+        JSON.stringify({
+          event: "hello",
+          user: { id: label, username: label },
+          you: connId,
+          peers,
+          sharerId: currentSharer,
+        })
+      );
+      broadcastExcept(connId, { event: "peer-join", peer: { id: connId, label } });
+
+      socket.on("message", (raw) => {
+        let data: { event?: string; to?: string; data?: unknown } | null = null;
+        try {
+          data = JSON.parse(String(raw));
+        } catch {
+          return;
+        }
+        if (!data || typeof data.event !== "string") return;
+        if (data.event === "alert") {
+          const now = Date.now();
+          const prev = lastAlertAt.get(connId) ?? 0;
+          if (now - prev < 1500) return;
+          lastAlertAt.set(connId, now);
+          const kind = typeof (data as { kind?: unknown }).kind === "string" ? (data as { kind: string }).kind : "alert";
+          broadcastExcept(connId, { event: "alert", from: connId, kind });
+          return;
+        }
+        if (data.event === "signal") {
+          if (typeof data.to !== "string") return;
+          sendTo(data.to, { event: "signal", from: connId, data: data.data });
+          return;
+        }
+        if (data.event === "share-start") {
+          if (currentSharer && currentSharer !== connId) {
+            broadcast({ event: "share-stop", peerId: currentSharer });
+          }
+          currentSharer = connId;
+          broadcast({ event: "share-start", peerId: connId });
+          return;
+        }
+        if (data.event === "share-stop") {
+          if (currentSharer !== connId) return;
+          currentSharer = null;
+          broadcast({ event: "share-stop", peerId: connId });
+          return;
+        }
+      });
+
       socket.on("close", () => {
         clients.delete(entry);
+        lastAlertAt.delete(connId);
+        if (currentSharer === connId) {
+          currentSharer = null;
+          broadcast({ event: "share-stop", peerId: connId });
+        }
+        broadcast({ event: "peer-leave", peerId: connId });
         scheduleRoomResetIfEmpty();
       });
     });
@@ -414,6 +701,22 @@ async function main() {
   await app.listen({ port: PORT, host: HOST });
   const scheme = httpsOpts ? "https" : "http";
   console.log(`Helles listening on ${scheme}://${HOST === "0.0.0.0" ? "<lan-ip>" : HOST}:${PORT}`);
+
+  const shutdown = (signal: string) => {
+    console.log(`Helles: ${signal} — wiping in-memory state.`);
+    try {
+      clearAllMessages(db);
+    } catch {
+      /* ignore */
+    }
+    uploads.clear();
+    previewCache.clear();
+    roomKeyRef.b64u = "";
+    closeDb();
+    app.close().finally(() => process.exit(0));
+  };
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 function guessExt(mime: string): string {
