@@ -81,3 +81,17 @@ export async function deleteMessage(id: string): Promise<Message> {
   const data = await parse<{ message: Message }>(res);
   return data.message;
 }
+
+export type LinkPreview = {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  error?: string;
+};
+
+export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
+  const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`);
+  return parse(res);
+}
