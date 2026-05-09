@@ -503,15 +503,7 @@ async function main() {
     }
     if (meta && typeof meta.diskName === "string") {
       const name = path.basename(meta.diskName);
-      const full = path.resolve(path.join(uploadDir, name));
-      const base = path.resolve(uploadDir) + path.sep;
-      if (full.startsWith(base)) {
-        try {
-          await fs.promises.unlink(full);
-        } catch {
-          /* ignore */
-        }
-      }
+      uploads.delete(name);
     }
 
     const tombMeta = { removed: 1, at: Date.now() };
