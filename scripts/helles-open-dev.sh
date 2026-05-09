@@ -9,6 +9,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE_OR_URL="${1:-local}"
 
+notify_error() {
+  local msg="$1"
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "Helles" "$msg" 2>/dev/null || true
+  fi
+  echo "$msg" >&2
+}
+
 resolve_url() {
   case "$PROFILE_OR_URL" in
   local)
@@ -81,16 +89,28 @@ start_local_dev_if_needed() {
 }
 
 open_browser() {
-  if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$URL" >/dev/null 2>&1 &
-  elif command -v sensible-browser >/dev/null 2>&1; then
-    sensible-browser "$URL" >/dev/null 2>&1 &
-  elif command -v x-www-browser >/dev/null 2>&1; then
-    x-www-browser "$URL" >/dev/null 2>&1 &
-  else
-    echo "Kein xdg-open / Browser-Starter gefunden." >&2
-    exit 1
+  open_cmd() {
+    local cmd="$1"
+    shift
+    command -v "$cmd" >/dev/null 2>&1 || return 127
+    "$cmd" "$@" >/dev/null 2>&1
+  }
+
+  if open_cmd xdg-open "$URL"; then
+    return 0
   fi
+  if open_cmd gio open "$URL"; then
+    return 0
+  fi
+  if open_cmd sensible-browser "$URL"; then
+    return 0
+  fi
+  if open_cmd x-www-browser "$URL"; then
+    return 0
+  fi
+
+  notify_error "Kein Browser-Starter gefunden oder Öffnen fehlgeschlagen: ${URL}"
+  exit 1
 }
 
 start_local_dev_if_needed
