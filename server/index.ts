@@ -1,0 +1,408 @@
+import path from "node:path";
+import fs, { createReadStream } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
+import os from "node:os";
+import Fastify from "fastify";
+import websocket from "@fastify/websocket";
+import staticFiles from "@fastify/static";
+import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
+import type { WebSocket } from "ws";
+import { nanoid } from "nanoid";
+import { getDb, closeDb, clearAllMessages } from "./db.js";
+import { peerLabel } from "./peer.js";
+import { rotateRoomKey, roomKeyBase64Url } from "./room.js";
+
+function resolveProjectRoot(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const oneUp = path.resolve(here, "..");
+  if (fs.existsSync(path.join(oneUp, "package.json"))) return oneUp;
+  const twoUp = path.resolve(here, "..", "..");
+  if (fs.existsSync(path.join(twoUp, "package.json"))) return twoUp;
+  return oneUp;
+}
+
+const PROJECT_ROOT = resolveProjectRoot();
+loadEnv({ path: path.join(PROJECT_ROOT, ".env") });
+
+const DATA_DIR = process.env.HELLES_DATA_DIR ?? path.join(PROJECT_ROOT, "data");
+const PORT = Number(process.env.HELLES_PORT ?? 3847);
+const HOST = process.env.HELLES_HOST ?? "0.0.0.0";
+const MAX_UPLOAD_MB = Number(process.env.HELLES_MAX_UPLOAD_MB ?? 200);
+const MAX_BODY_CHARS = 512_000;
+/** Wenn 0: sofort leeren, sobald der letzte Client weg ist (kann bei alleinigem Tab-Refresh den Chat löschen). */
+const ROOM_RESET_MS = Number(process.env.HELLES_ROOM_RESET_MS ?? 15_000);
+
+type OutMsg = {
+  id: string;
+  userId: string;
+  username: string;
+  type: string;
+  body: string;
+  meta: Record<string, unknown> | null;
+  createdAt: number;
+};
+
+const clients = new Set<{ ws: WebSocket; label: string }>();
+
+function broadcast(payload: unknown): void {
+  const raw = JSON.stringify(payload);
+  for (const c of clients) {
+    if (c.ws.readyState === 1) c.ws.send(raw);
+  }
+}
+
+function listLanIpv4Urls(port: number, scheme: string): string[] {
+  const out: string[] = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    if (!list) continue;
+    for (const i of list) {
+      if (String(i.family) !== "IPv4") continue;
+      if (i.internal) continue;
+      out.push(`${scheme}://${i.address}:${port}`);
+    }
+  }
+  return [...new Set(out)];
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function joinHelpPage(port: number, scheme: string): string {
+  const urls = listLanIpv4Urls(port, scheme);
+  const li = urls.length
+    ? urls.map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`).join("")
+    : "<li><em>Keine LAN-IPv4 gefunden — IP manuell eintragen.</em></li>";
+
+  return `<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Helles — LAN</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:42rem;margin:0 auto;padding:1.25rem;line-height:1.55;background:#07060c;color:#e8e6f2}
+  a{color:#6cf0c8} code{background:#1a1628;padding:.1rem .35rem;border-radius:4px}
+  h1{font-size:1.25rem} .box{border:1px solid #2a2540;border-radius:12px;padding:1rem;margin:1rem 0;background:#0e0c18}
+</style>
+</head>
+<body>
+<h1>Helles — ein Raum im LAN</h1>
+<p>Gemeinsamer Stream; Nachrichten werden im Browser mit AES-GCM verschlüsselt. Der Raum-Schlüssel liegt in <code>data/room.key</code>. Beim Serverstart und wenn alle Clients weg sind (Standard: nach ca. 15&nbsp;s), beginnt ein leerer Chat mit neuem Schlüssel.</p>
+<ul>${li}</ul>
+<p><strong>HTTPS</strong> nötig für Web Crypto: Dev <code>npm run dev</code> → <strong>https://&lt;IP&gt;:5173</strong>. Production: <code>HELLES_HTTPS_*_PATH</code> in <code>.env</code>, dann <strong>https://&lt;IP&gt;:${port}</strong>.</p>
+<p><a href="/">Zur App</a></p>
+</body>
+</html>`;
+}
+
+function loadHttpsOptions(): { key: Buffer; cert: Buffer } | null {
+  const kp = process.env.HELLES_HTTPS_KEY_PATH?.trim();
+  const cp = process.env.HELLES_HTTPS_CERT_PATH?.trim();
+  if (!kp || !cp) return null;
+  try {
+    return { key: fs.readFileSync(kp), cert: fs.readFileSync(cp) };
+  } catch (e) {
+    console.error("HELLES_HTTPS_KEY_PATH / HELLES_HTTPS_CERT_PATH unreadable — using HTTP", e);
+    return null;
+  }
+}
+
+async function main() {
+  const db = getDb(DATA_DIR);
+  const uploadDir = path.join(DATA_DIR, "uploads");
+  fs.mkdirSync(uploadDir, { recursive: true });
+
+  const roomKeyRef = { b64u: "" };
+
+  function clearUploadFiles(): void {
+    if (!fs.existsSync(uploadDir)) return;
+    for (const n of fs.readdirSync(uploadDir)) {
+      fs.unlinkSync(path.join(uploadDir, n));
+    }
+  }
+
+  function wipeRoom(reason: string): void {
+    clearAllMessages(db);
+    clearUploadFiles();
+    roomKeyRef.b64u = roomKeyBase64Url(rotateRoomKey(DATA_DIR));
+    console.log(`Helles: neuer Chat (${reason}) — Nachrichten und Uploads geleert.`);
+  }
+
+  wipeRoom("startup");
+
+  let roomResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function cancelRoomReset(): void {
+    if (roomResetTimer) {
+      clearTimeout(roomResetTimer);
+      roomResetTimer = null;
+    }
+  }
+
+  function scheduleRoomResetIfEmpty(): void {
+    if (clients.size !== 0) return;
+    cancelRoomReset();
+    if (ROOM_RESET_MS <= 0) {
+      wipeRoom("room_empty");
+      return;
+    }
+    roomResetTimer = setTimeout(() => {
+      roomResetTimer = null;
+      if (clients.size !== 0) return;
+      wipeRoom("room_empty");
+    }, ROOM_RESET_MS);
+  }
+
+  const isProd = process.env.NODE_ENV === "production";
+  const trustProxy = process.env.HELLES_TRUST_PROXY === "1";
+  const httpsOpts = loadHttpsOptions();
+  const publicScheme = httpsOpts ? "https" : "http";
+
+  const app = Fastify({
+    logger: true,
+    trustProxy,
+    bodyLimit: Math.min(MAX_UPLOAD_MB * 1024 * 1024, 512 * 1024 * 1024),
+    ...(httpsOpts ? { https: httpsOpts } : {}),
+  });
+
+  await app.register(rateLimit, {
+    global: true,
+    max: 600,
+    timeWindow: "1 minute",
+    keyGenerator: (req) => peerLabel(req),
+  });
+  await app.register(multipart, {
+    limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024, files: 2 },
+  });
+  await app.register(websocket);
+
+  app.addHook("onSend", async (_req, reply) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Referrer-Policy", "no-referrer");
+    reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (isProd) {
+      reply.header(
+        "Content-Security-Policy",
+        "default-src 'self'; img-src 'self' blob: data: https: http:; media-src 'self' blob: https: http:; frame-src 'self' blob: https: http:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+      );
+    }
+  });
+
+  app.get("/join", async (_req, reply) => {
+    return reply.type("text/html; charset=utf-8").send(joinHelpPage(PORT, publicScheme));
+  });
+
+  const clientDist = path.join(PROJECT_ROOT, "dist/client");
+  if (fs.existsSync(clientDist)) {
+    await app.register(staticFiles, { root: clientDist, prefix: "/" });
+  }
+
+  app.get("/api/health", async () => ({ ok: true }));
+
+  app.get("/api/room-key", async () => ({ keyB64u: roomKeyRef.b64u }));
+
+  app.get("/api/me", async (request) => {
+    const label = peerLabel(request);
+    return { user: { id: label, username: label } };
+  });
+
+  app.get("/api/messages", async (request, reply) => {
+    const after = String((request.query as { after?: string }).after ?? "");
+    const anchor = after
+      ? (db.prepare("SELECT created_at FROM messages WHERE id = ?").get(after) as { created_at: number } | undefined)
+      : null;
+    if (after && !anchor) return reply.code(400).send({ error: "bad_cursor" });
+    const rows =
+      after && anchor
+        ? (db
+            .prepare(
+              `SELECT id, sender_label, type, body, meta, created_at
+               FROM messages WHERE created_at > ?
+               ORDER BY created_at ASC LIMIT 200`
+            )
+            .all(anchor.created_at) as Record<string, unknown>[])
+        : (db
+            .prepare(
+              `SELECT id, sender_label, type, body, meta, created_at FROM messages
+               ORDER BY created_at DESC LIMIT 80`
+            )
+            .all()
+            .reverse() as Record<string, unknown>[]);
+    return { messages: rows.map(normalizeRow) };
+  });
+
+  app.post("/api/messages", async (request, reply) => {
+    const label = peerLabel(request);
+    const body = request.body as { type?: string; body?: string; meta?: Record<string, unknown> };
+    const type = body.type ?? "text";
+    const allowed = new Set(["text", "link", "image", "video", "audio", "file"]);
+    if (!allowed.has(type)) return reply.code(400).send({ error: "bad_type" });
+    let text = typeof body.body === "string" ? body.body : "";
+    if (text.length > MAX_BODY_CHARS) text = text.slice(0, MAX_BODY_CHARS);
+    if (type === "text" || type === "link") {
+      if (!text.trim()) return reply.code(400).send({ error: "empty" });
+    }
+    const meta = body.meta && typeof body.meta === "object" ? body.meta : null;
+    const id = nanoid();
+    const createdAt = Date.now();
+    db.prepare("INSERT INTO messages (id, sender_label, type, body, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+      id,
+      label,
+      type,
+      text,
+      meta ? JSON.stringify(meta) : null,
+      createdAt
+    );
+    const msg: OutMsg = {
+      id,
+      userId: label,
+      username: label,
+      type,
+      body: text,
+      meta,
+      createdAt,
+    };
+    broadcast({ event: "message", message: msg });
+    return { message: msg };
+  });
+
+  app.post("/api/upload", async (request, reply) => {
+    const label = peerLabel(request);
+    let fileBuf: Buffer | null = null;
+    let metaJson: string | null = null;
+    for await (const part of request.parts()) {
+      if (part.type === "file" && part.fieldname === "file") {
+        fileBuf = await part.toBuffer();
+      } else if (part.type === "field" && part.fieldname === "meta") {
+        metaJson = String(part.value ?? "");
+      }
+    }
+    if (!fileBuf?.length) return reply.code(400).send({ error: "no_file" });
+    let meta: Record<string, unknown>;
+    try {
+      meta = metaJson ? (JSON.parse(metaJson) as Record<string, unknown>) : {};
+    } catch {
+      return reply.code(400).send({ error: "bad_meta" });
+    }
+    const enc = meta.enc === 1 || meta.enc === true;
+    const mime = typeof meta.mime === "string" ? meta.mime : "application/octet-stream";
+    let type: "image" | "video" | "audio" | "file" = "file";
+    if (mime.startsWith("image/")) type = "image";
+    else if (mime.startsWith("video/")) type = "video";
+    else if (mime.startsWith("audio/")) type = "audio";
+
+    const stored = nanoid(24);
+    const diskName = enc ? `${stored}.bin` : `${stored}${guessExt(mime)}`;
+    const full = path.join(uploadDir, diskName);
+    await fs.promises.writeFile(full, fileBuf);
+    const stat = await fs.promises.stat(full);
+    const id = nanoid();
+    const createdAt = Date.now();
+    const metaOut = { ...meta, mime, size: stat.size, diskName, enc: enc ? 1 : 0 };
+    const bodyLabel = "file";
+    db.prepare("INSERT INTO messages (id, sender_label, type, body, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+      id,
+      label,
+      type,
+      bodyLabel,
+      JSON.stringify(metaOut),
+      createdAt
+    );
+    const msg: OutMsg = {
+      id,
+      userId: label,
+      username: label,
+      type,
+      body: bodyLabel,
+      meta: metaOut,
+      createdAt,
+    };
+    broadcast({ event: "message", message: msg });
+    return { message: msg };
+  });
+
+  app.get("/api/media/:name", async (request, reply) => {
+    const name = path.basename((request.params as { name: string }).name);
+    const full = path.resolve(path.join(uploadDir, name));
+    const base = path.resolve(uploadDir) + path.sep;
+    if (!full.startsWith(base)) return reply.code(400).send();
+    try {
+      await fs.promises.access(full, fs.constants.R_OK);
+    } catch {
+      return reply.code(404).send();
+    }
+    reply.header("Content-Type", "application/octet-stream");
+    reply.header("X-Content-Type-Options", "nosniff");
+    return reply.send(createReadStream(full));
+  });
+
+  app.register(async (f) => {
+    f.get("/ws", { websocket: true }, (socket, req) => {
+      cancelRoomReset();
+      const label = peerLabel(req);
+      const entry = { ws: socket, label };
+      clients.add(entry);
+      socket.send(JSON.stringify({ event: "hello", user: { id: label, username: label } }));
+      socket.on("close", () => {
+        clients.delete(entry);
+        scheduleRoomResetIfEmpty();
+      });
+    });
+  });
+
+  if (fs.existsSync(clientDist)) {
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith("/api") || request.url.startsWith("/ws") || request.url.startsWith("/join")) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+      return reply.sendFile("index.html", clientDist);
+    });
+  }
+
+  await app.listen({ port: PORT, host: HOST });
+  const scheme = httpsOpts ? "https" : "http";
+  console.log(`Helles listening on ${scheme}://${HOST === "0.0.0.0" ? "<lan-ip>" : HOST}:${PORT}`);
+}
+
+function guessExt(mime: string): string {
+  if (mime === "image/png") return ".png";
+  if (mime === "image/jpeg") return ".jpg";
+  if (mime === "image/webp") return ".webp";
+  if (mime === "image/gif") return ".gif";
+  if (mime === "video/mp4") return ".mp4";
+  if (mime === "video/webm") return ".webm";
+  if (mime === "audio/mpeg") return ".mp3";
+  if (mime === "audio/ogg") return ".ogg";
+  if (mime === "audio/wav") return ".wav";
+  return ".bin";
+}
+
+function normalizeRow(r: Record<string, unknown>): OutMsg {
+  let meta: Record<string, unknown> | null = null;
+  if (r.meta && typeof r.meta === "string") {
+    try {
+      meta = JSON.parse(r.meta) as Record<string, unknown>;
+    } catch {
+      meta = null;
+    }
+  }
+  const label = String(r.sender_label);
+  return {
+    id: String(r.id),
+    userId: label,
+    username: label,
+    type: String(r.type),
+    body: String(r.body),
+    meta,
+    createdAt: Number(r.created_at),
+  };
+}
+
+main().catch((e) => {
+  console.error(e);
+  closeDb();
+  process.exit(1);
+});
