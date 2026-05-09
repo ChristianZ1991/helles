@@ -63,6 +63,77 @@ function isHttpsPageUrl(raw: string): boolean {
   return t.startsWith("https://") || t.startsWith("http://");
 }
 
+/** youtube-nocookie + fehlender Referrer führt oft zu „Video nicht verfügbar“ — Standard-Embed + origin. */
+function youtubeEmbedSrc(videoId: string): string {
+  const o =
+    typeof window !== "undefined" && window.location?.origin
+      ? `&origin=${encodeURIComponent(window.location.origin)}`
+      : "";
+  return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?modestbranding=1&rel=0${o}`;
+}
+
+/** YouTube / Vimeo / direkte Video-URL — `grow` für das linke Dock, sonst kompakte Vorschau. */
+export function MediaEmbedFrame(props: { parsed: ParsedMediaEmbed; grow?: boolean; className?: string }) {
+  const { parsed, grow, className } = props;
+  const root = ["media-embed-frame", className].filter(Boolean).join(" ");
+  const aspectCx = grow ? "link-embed-aspect link-embed-aspect--grow" : "link-embed-aspect";
+  const videoCx = grow ? "link-embed-video link-embed-video--grow" : "link-embed-video";
+
+  if (parsed.kind === "youtube") {
+    const src = youtubeEmbedSrc(parsed.id);
+    return (
+      <div className={root}>
+        <div className={aspectCx}>
+          <iframe
+            className="link-embed-iframe"
+            src={src}
+            title="YouTube"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (parsed.kind === "vimeo") {
+    const src = `https://player.vimeo.com/video/${encodeURIComponent(parsed.id)}`;
+    return (
+      <div className={root}>
+        <div className={aspectCx}>
+          <iframe
+            className="link-embed-iframe"
+            src={src}
+            title="Vimeo"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={root}>
+      <video className={videoCx} src={parsed.src} controls playsInline preload="metadata" />
+    </div>
+  );
+}
+
+/** Linkes Dock — füllt die Höhe, Key erzwingt Reload bei neuem Link. */
+export function DockedVideoPlayer(props: { url: string }) {
+  const { url } = props;
+  const parsed = parseMediaEmbed(url);
+  if (!parsed) {
+    return <p className="hint docked-video-fallback">Diese URL kann hier nicht eingebettet werden.</p>;
+  }
+  return <MediaEmbedFrame key={url} parsed={parsed} grow className="docked-video-frame" />;
+}
+
 export function LinkRichPreview(props: { url: string; embedPage?: boolean }) {
   const { url, embedPage } = props;
 
@@ -85,49 +156,14 @@ export function LinkRichPreview(props: { url: string; embedPage?: boolean }) {
       </div>
     ) : null;
 
-  if (parsed?.kind === "youtube") {
-    const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(parsed.id)}?modestbranding=1`;
+  if (parsed) {
     return (
       <div className="link-embed-shell">
-        <div className="link-embed-aspect">
-          <iframe
-            className="link-embed-iframe"
-            src={src}
-            title="YouTube"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            loading="lazy"
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (parsed?.kind === "vimeo") {
-    const src = `https://player.vimeo.com/video/${encodeURIComponent(parsed.id)}`;
-    return (
-      <div className="link-embed-shell">
-        <div className="link-embed-aspect">
-          <iframe
-            className="link-embed-iframe"
-            src={src}
-            title="Vimeo"
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-            loading="lazy"
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (parsed?.kind === "direct") {
-    return (
-      <div className="link-embed-shell">
-        <video className="link-embed-video" src={parsed.src} controls playsInline preload="metadata" />
+        <MediaEmbedFrame parsed={parsed} />
       </div>
     );
   }
 
   return iframePage;
 }
+

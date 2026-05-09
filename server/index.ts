@@ -269,6 +269,55 @@ async function main() {
     return { message: msg };
   });
 
+  app.delete("/api/messages/:id", async (request, reply) => {
+    const label = peerLabel(request);
+    const id = path.basename((request.params as { id: string }).id);
+    const row = db.prepare("SELECT sender_label, meta, created_at FROM messages WHERE id = ?").get(id) as
+      | { sender_label: string; meta: string | null; created_at: number }
+      | undefined;
+    if (!row) return reply.code(404).send({ error: "not_found" });
+    if (row.sender_label !== label) return reply.code(403).send({ error: "forbidden" });
+
+    let meta: Record<string, unknown> | null = null;
+    if (row.meta && typeof row.meta === "string") {
+      try {
+        meta = JSON.parse(row.meta) as Record<string, unknown>;
+      } catch {
+        meta = null;
+      }
+    }
+    if (meta && typeof meta.diskName === "string") {
+      const name = path.basename(meta.diskName);
+      const full = path.resolve(path.join(uploadDir, name));
+      const base = path.resolve(uploadDir) + path.sep;
+      if (full.startsWith(base)) {
+        try {
+          await fs.promises.unlink(full);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    const tombMeta = { removed: 1, at: Date.now() };
+    const upd = db
+      .prepare("UPDATE messages SET type = 'deleted', body = '', meta = ? WHERE id = ? AND sender_label = ?")
+      .run(JSON.stringify(tombMeta), id, label);
+    if (upd.changes === 0) return reply.code(404).send({ error: "not_found" });
+
+    const msg: OutMsg = {
+      id,
+      userId: label,
+      username: label,
+      type: "deleted",
+      body: "",
+      meta: tombMeta,
+      createdAt: Number(row.created_at),
+    };
+    broadcast({ event: "message", message: msg });
+    return { message: msg };
+  });
+
   app.post("/api/upload", async (request, reply) => {
     const label = peerLabel(request);
     let fileBuf: Buffer | null = null;

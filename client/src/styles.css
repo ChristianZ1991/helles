@@ -102,6 +102,211 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 12px);
 }
 
+.shell.shell--in-app {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.app-root {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: clamp(12px, 3vw, 24px);
+  padding-bottom: env(safe-area-inset-bottom, 12px);
+  box-sizing: border-box;
+  gap: 0;
+}
+
+.app-root--docked {
+  max-width: min(1680px, 100%);
+}
+
+.video-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 220px;
+  max-width: 78vw;
+  border-radius: var(--radius);
+  border: 1px solid var(--stroke);
+  background: rgba(8, 6, 14, 0.82);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.video-dock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--stroke);
+  flex-shrink: 0;
+}
+
+.video-dock-title {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.video-dock-close {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.video-dock-close:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.video-dock-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  overflow: auto;
+}
+
+.media-embed-frame {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.docked-video-frame {
+  flex: 1;
+  min-height: 200px;
+}
+
+.docked-video-fallback {
+  padding: 12px;
+  margin: 0;
+}
+
+.link-embed-aspect--grow {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 200px;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.link-embed-video--grow {
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 200px;
+  max-height: min(70vh, 720px);
+  object-fit: contain;
+  background: #000;
+  border-radius: 10px;
+}
+
+.splitter--ew {
+  width: 10px;
+  flex-shrink: 0;
+  cursor: ew-resize;
+  touch-action: none;
+  align-self: stretch;
+  position: relative;
+}
+
+.splitter--ew::after {
+  content: "";
+  position: absolute;
+  top: 16%;
+  bottom: 16%;
+  left: 50%;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.splitter--ew:hover::after {
+  background: rgba(108, 240, 200, 0.4);
+}
+
+.splitter--ns {
+  height: 10px;
+  flex-shrink: 0;
+  cursor: ns-resize;
+  touch-action: none;
+  position: relative;
+}
+
+.splitter--ns::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.splitter--ns:hover::after {
+  background: rgba(108, 240, 200, 0.4);
+}
+
+.main-split {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.composer.composer--in-split {
+  margin-top: 0;
+  flex-shrink: 0;
+  max-height: min(55vh, 520px);
+  overflow-y: auto;
+}
+
+.composer.composer--in-split textarea.input {
+  max-height: min(38vh, 320px);
+}
+
+.stream.stream--sized {
+  flex: none !important;
+  min-height: 120px !important;
+}
+
+.link-pin-hint {
+  display: block;
+  margin-top: 4px;
+  max-width: 100%;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -175,6 +380,27 @@ body {
   transform: perspective(900px) rotateX(2deg);
   transition: transform 0.35s ease, border-color 0.25s ease, box-shadow 0.35s ease;
 }
+
+.node--tombstone {
+  opacity: 0.88;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(10, 8, 20, 0.35);
+  transform: none;
+}
+
+.node--tombstone:hover {
+  transform: none;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.node-tombstone-text {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .node:hover {
   transform: perspective(900px) rotateX(0deg) translateY(-2px);
   border-color: rgba(108, 240, 200, 0.35);
@@ -189,6 +415,32 @@ body {
   font-size: 0.78rem;
   color: var(--muted);
 }
+.node-time-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.node-delete-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--danger);
+  background: rgba(255, 107, 138, 0.12);
+  border: 1px solid rgba(255, 107, 138, 0.35);
+}
+.node-delete-btn:hover:not(:disabled) {
+  background: rgba(255, 107, 138, 0.2);
+  border-color: rgba(255, 107, 138, 0.55);
+}
+.node-delete-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .node-user {
   color: var(--accent);
   font-weight: 600;
@@ -202,6 +454,18 @@ body {
   font-size: 0.98rem;
   line-height: 1.45;
   word-break: break-word;
+}
+
+.node-file-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.file-dl-btn {
+  margin-top: 2px;
 }
 
 .node-media {

@@ -75,3 +75,9 @@ export async function uploadEncryptedFile(meta: string, cipherBlob: Blob): Promi
   const res = await fetch("/api/upload", { method: "POST", body: fd });
   return parse(res);
 }
+
+export async function deleteMessage(id: string): Promise<Message> {
+  const res = await fetch(`/api/messages/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const data = await parse<{ message: Message }>(res);
+  return data.message;
+}

@@ -10,7 +10,8 @@
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
-    "check:lan": "bash scripts/check-lan-listeners.sh"
+    "check:lan": "bash scripts/check-lan-listeners.sh",
+    "desktop": "bash scripts/install-desktop-shortcuts.sh"
   },
   "dependencies": {
     "@fastify/multipart": "^9.0.3",
@@ -19,6 +20,7 @@
     "@fastify/websocket": "^11.0.2",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
+    "fflate": "^0.8.2",
     "nanoid": "^5.0.9"
   },
   "devDependencies": {
