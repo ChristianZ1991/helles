@@ -843,7 +843,7 @@ export function App() {
     () => (
       <span className="hint">
         <span className={`status-dot ${wsOn ? "on" : ""}`} />
-        {wsOn ? "link · ok" : "linking…"}
+        {wsOn ? "online" : "connecting…"}
       </span>
     ),
     [wsOn]
@@ -857,7 +857,7 @@ export function App() {
           <div className="orb b" />
         </div>
         <div className="shell" style={{ justifyContent: "center" }}>
-          <p className="hint">establishing link…</p>
+          <p className="hint">connecting…</p>
         </div>
       </>
     );
@@ -879,7 +879,7 @@ export function App() {
             <code>HELLES_HTTPS_KEY_PATH</code> / <code>HELLES_HTTPS_CERT_PATH</code>.
           </p>
           <a className="btn" href="/join" style={{ display: "inline-block", marginTop: 12, textDecoration: "none" }}>
-            help desk
+            join
           </a>
         </div>
       </>
@@ -926,13 +926,13 @@ export function App() {
             <div className="brand">
               <h1 data-text="Helles">Helles</h1>
               <p>
-                TX/RX · LAN · AES‑GCM · OPERATOR <strong>{user.username}</strong>
+                AES‑GCM · LAN · <strong>{user.username}</strong>
               </p>
             </div>
             <div>
               {presence}
               <a className="pill" href="/join" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-                help desk
+                join
               </a>
             </div>
           </header>
@@ -967,7 +967,7 @@ export function App() {
                   <div className={`input-shell${attachments.length > 0 ? " has-attach" : ""}`}>
                     {attachments.length > 0 ? (
                       <div className="attach-tray" role="list" aria-label="staged attachments">
-                        <span className="attach-tray-tag">▮ PAYLOAD</span>
+                        <span className="attach-tray-tag">▮ ATTACHMENTS</span>
                         <div className="attach-tray-scroll">
                           {attachments.map((a) => (
                             <AttachChip

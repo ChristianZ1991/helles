@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────
-   HELLES // CIPHER TERMINAL — MIL-SPEC FIELD CONSOLE
+   Helles — terminal-style chat console
    Monochrome P1 phosphor green on tac-black (VT100 / Apple-II
    green-screen lineage). Single-channel readout. Phosphor-decay
    glow, not neon. Status: alert-red for error / armed, hazard
@@ -385,9 +385,9 @@ body {
   min-width: 0;
 }
 
-/* classification banner — dim, austere terminal printout */
+/* status strip — dim, austere terminal printout */
 .shell::before {
-  content: "> CIPHER ALPHA-7  ::  EYES ONLY  ::  AES-GCM/256  ::  LAN-NET ONLY  ::  EPHEMERAL  ::  CIPHER ALPHA-7  ::  EYES ONLY  ::  AES-GCM/256  ::  LAN-NET ONLY  ::  EPHEMERAL  ::  CIPHER ALPHA-7  ::  EYES ONLY  ::  AES-GCM/256";
+  content: "> AES-GCM/256  ::  LAN ONLY  ::  EPHEMERAL  ::  AES-GCM/256  ::  LAN ONLY  ::  EPHEMERAL  ::  AES-GCM/256  ::  LAN ONLY  ::  EPHEMERAL";
   display: block;
   font-family: var(--mono);
   font-weight: 700;
@@ -448,15 +448,7 @@ body {
   position: relative;
 }
 .brand::before {
-  content: "[ CALLSIGN ]";
-  position: absolute;
-  top: -22px;
-  left: 0;
-  font-family: var(--mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.22em;
-  color: var(--ink-faint);
-  text-transform: uppercase;
+  content: none;
 }
 
 .brand h1 {
@@ -557,11 +549,11 @@ body {
 }
 .pill:hover::before { color: var(--bg-0); }
 
-/* ─── operational briefing panel ─── */
+/* ─── intro panel ─── */
 
 .shell .box {
   position: relative;
-  padding: 26px 18px 18px;
+  padding: 14px 18px 18px;
   border: var(--stroke) solid var(--olive-2);
   border-radius: var(--r-sm);
   background: var(--bg-1);
@@ -572,20 +564,7 @@ body {
   overflow: hidden;
 }
 .shell .box::before {
-  content: "▮  OPERATIONAL  BRIEFING  ▮";
-  display: block;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  font-family: var(--stencil-font);
-  font-weight: 800;
-  font-size: 0.72rem;
-  letter-spacing: 0.32em;
-  color: var(--bg-0);
-  background: var(--phosphor);
-  padding: 4px 12px;
-  text-align: center;
+  content: none;
 }
 .shell .box::after {
   /* hazard tape on the bottom — only critical edges */
@@ -611,7 +590,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   Stream: the SIGINT feed.
+   Message stream
    ───────────────────────────────────────────────────────────────── */
 
 .stream {
@@ -625,28 +604,15 @@ body {
     linear-gradient(to right, rgba(34, 255, 119, 0.018) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(34, 255, 119, 0.018) 1px, transparent 1px);
   background-size: 24px 24px;
-  padding: 28px 12px 12px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow: hidden;
 }
 
-/* "// SIGINT FEED //" strip — amber, no neon */
 .stream::before {
-  content: "▶  SIGINT FEED  ◀  REAL-TIME  ◀  CIPHER LIVE";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: var(--bg-0);
-  border-bottom: var(--stroke) solid var(--olive-2);
-  font-family: var(--stencil-font);
-  font-weight: 700;
-  font-size: 0.72rem;
-  letter-spacing: 0.28em;
-  color: var(--phosphor);
-  padding: 5px 14px;
+  content: none;
 }
 
 .stream::after {
@@ -700,7 +666,7 @@ body {
   filter: drop-shadow(0 0 4px rgba(34, 255, 119, 0.35));
 }
 .stream-scroll:empty::after {
-  content: "▮ STANDING BY · NO CHATTER ▮";
+  content: "▮ no messages yet ▮";
   display: block;
   text-align: center;
   font-family: var(--stencil-font);
@@ -2246,7 +2212,7 @@ input.input:focus {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   Auth / boot panel: a "LINK FAILURE" terminal screen.
+   Auth / boot error panel
    ───────────────────────────────────────────────────────────────── */
 
 .auth-panel {
@@ -2263,7 +2229,7 @@ input.input:focus {
   overflow: hidden;
 }
 .auth-panel::before {
-  content: "▮ LINK FAILURE  ::  CIPHER ALPHA-7  ::  ERR-0xC0FFEE ▮";
+  content: "▮ offline ▮";
   position: absolute;
   top: 0;
   left: 0;
