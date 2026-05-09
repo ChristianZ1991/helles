@@ -1,3 +1,7 @@
+import { useEffect, useState } from "react";
+import * as api from "./api";
+import type { LinkPreview } from "./api";
+
 export type ParsedMediaEmbed =
   | { kind: "youtube"; id: string }
   | { kind: "vimeo"; id: string }
@@ -58,32 +62,16 @@ export function parseMediaEmbed(raw: string): ParsedMediaEmbed | null {
   return null;
 }
 
-function isHttpsPageUrl(raw: string): boolean {
-  const t = raw.trim();
-  return t.startsWith("https://") || t.startsWith("http://");
-}
-
-export function LinkRichPreview(props: { url: string; embedPage?: boolean }) {
-  const { url, embedPage } = props;
-
+/**
+ * Renders an inline media embed for sources that explicitly allow it
+ * (YouTube, Vimeo, direct video files). Arbitrary HTTPS pages almost
+ * universally refuse iframe embedding via X-Frame-Options/CSP, so for those
+ * use {@link LinkPreviewCard} instead — it queries the server for OpenGraph
+ * metadata and renders a rich card.
+ */
+export function LinkRichPreview(props: { url: string }) {
+  const { url } = props;
   const parsed = parseMediaEmbed(url);
-
-  const iframePage =
-    embedPage && isHttpsPageUrl(url) && !parsed ? (
-      <div className="link-embed-shell link-embed-shell--page">
-        <iframe
-          className="link-embed-iframe-page"
-          src={url.trim()}
-          title="Seitenvorschau"
-          loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox allow-forms"
-        />
-        <p className="link-embed-note">
-          Viele Seiten blockieren die Einbettung — dann bleibt nur der Link oben.
-        </p>
-      </div>
-    ) : null;
 
   if (parsed?.kind === "youtube") {
     const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(parsed.id)}?modestbranding=1`;
@@ -129,5 +117,122 @@ export function LinkRichPreview(props: { url: string; embedPage?: boolean }) {
     );
   }
 
-  return iframePage;
+  return null;
+}
+
+export function LinkPreviewCard(props: { url: string }) {
+  const { url } = props;
+  const [preview, setPreview] = useState<LinkPreview | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    setState("loading");
+    setPreview(null);
+    api
+      .fetchLinkPreview(url)
+      .then((p) => {
+        if (cancelled) return;
+        setPreview(p);
+        setState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  let host = url;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    /* keep raw */
+  }
+
+  if (state === "loading") {
+    return (
+      <div className="link-card link-card--loading" aria-busy="true">
+        <span className="link-card-tag">▶ TARGET DOSSIER</span>
+        <span className="link-card-host">{host}</span>
+        <div className="link-card-loadbar" aria-hidden>
+          <span />
+        </div>
+        <span className="link-card-loadtxt">fetching ・ openGraph scrape in flight</span>
+      </div>
+    );
+  }
+
+  if (state === "error" || !preview) {
+    return (
+      <div className="link-card link-card--error">
+        <span className="link-card-tag">✕ DOSSIER UNREACHABLE</span>
+        <span className="link-card-host">{host}</span>
+        <span className="link-card-errtxt">target refused or timed out — link still drops above</span>
+      </div>
+    );
+  }
+
+  if (preview.error === "bot_block") {
+    return (
+      <div className="link-card link-card--blocked">
+        <span className="link-card-tag">▲ DOSSIER GATED</span>
+        <span className="link-card-host">{preview.siteName ?? host}</span>
+        <span className="link-card-errtxt">
+          site served an anti-bot challenge instead of metadata. opens normally in the browser ↗
+        </span>
+      </div>
+    );
+  }
+
+  const hasContent = preview.title || preview.description || preview.image;
+  if (!hasContent) {
+    return (
+      <div className="link-card link-card--empty">
+        <span className="link-card-tag">▮ NO METADATA</span>
+        <span className="link-card-host">{preview.siteName ?? host}</span>
+        <span className="link-card-errtxt">site exposes no openGraph or {`<title>`} — only the link drop</span>
+      </div>
+    );
+  }
+
+  return (
+    <a
+      className={`link-card${preview.image ? " has-image" : ""}`}
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+    >
+      <header className="link-card-head">
+        <span className="link-card-tag">▶ TARGET DOSSIER</span>
+        <span className="link-card-host">{preview.siteName ?? host}</span>
+      </header>
+      <div className="link-card-body">
+        {preview.image ? (
+          <div className="link-card-thumb" aria-hidden>
+            <img
+              src={preview.image}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                const img = e.currentTarget;
+                img.style.display = "none";
+              }}
+            />
+          </div>
+        ) : null}
+        <div className="link-card-text">
+          {preview.title ? <h4 className="link-card-title">{preview.title}</h4> : null}
+          {preview.description ? <p className="link-card-desc">{preview.description}</p> : null}
+        </div>
+      </div>
+      <footer className="link-card-foot">
+        <span className="link-card-arrow" aria-hidden>↗</span>
+        <span className="link-card-link">{url}</span>
+      </footer>
+    </a>
+  );
 }

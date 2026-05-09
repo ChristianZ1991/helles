@@ -75,3 +75,17 @@ export async function uploadEncryptedFile(meta: string, cipherBlob: Blob): Promi
   const res = await fetch("/api/upload", { method: "POST", body: fd });
   return parse(res);
 }
+
+export type LinkPreview = {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  error?: string;
+};
+
+export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
+  const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`);
+  return parse(res);
+}

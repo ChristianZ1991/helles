@@ -1,24 +1,60 @@
+/* ─────────────────────────────────────────────────────────────────
+   HELLES // CIPHER TERMINAL — MIL-SPEC FIELD CONSOLE
+   Monochrome P1 phosphor green on tac-black (VT100 / Apple-II
+   green-screen lineage). Single-channel readout. Phosphor-decay
+   glow, not neon. Status: alert-red for error / armed, hazard
+   tape only on critical edges. No amber, no rainbow.
+   ───────────────────────────────────────────────────────────────── */
+
 :root {
-  --bg0: #07060c;
-  --bg1: #0e0c18;
-  --ink: #e8e6f2;
-  --muted: #9a94b8;
-  --accent: #6cf0c8;
-  --accent2: #c86cff;
-  --glass: rgba(255, 255, 255, 0.06);
-  --stroke: rgba(255, 255, 255, 0.1);
-  --danger: #ff6b8a;
-  --radius: 18px;
-  --shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    "Segoe UI",
-    Roboto,
-    Ubuntu,
-    Cantarell,
-    "Noto Sans",
-    sans-serif;
+  /* Void & olive structure (true-dark) */
+  --bg-0: #020302;        /* deepest void — near pure black */
+  --bg-1: #060807;        /* panel */
+  --bg-2: #0a0d0b;        /* raised panel */
+  --olive: #0c110e;       /* ammo-can paint, very dark */
+  --olive-2: #18211c;     /* mid olive border */
+  --stencil: #2a3a30;     /* faded stencil */
+
+  /* Phosphor inks (monochrome P1 green dominates) */
+  --phosphor: #22ff77;        /* primary CRT phosphor — vivid green */
+  --phosphor-mid: #1ec466;    /* mid-green for body type */
+  --phosphor-dim: #137a3f;    /* dim green for borders + secondary */
+  --phosphor-faint: #0a3a1f;  /* nearly-decayed phosphor */
+  --phosphor-glow: rgba(34, 255, 119, 0.42);
+  --phosphor-soft: rgba(34, 255, 119, 0.10);
+
+  /* Status accents — sparingly used */
+  --ok: var(--phosphor);  /* link OK matches the primary channel */
+  --ok-glow: rgba(34, 255, 119, 0.45);
+  --alert: #ff3344;       /* alert red — error / armed stripe */
+  --alert-soft: rgba(255, 51, 68, 0.12);
+  --hazard: #d4a911;      /* hazard yellow — chevron tape only */
+
+  /* Text — all phosphor-tinted, single-channel feel */
+  --ink: var(--phosphor-mid);
+  --ink-soft: #166e3a;
+  --ink-faint: #0c3d1f;
+
+  /* Geometry */
+  --r-sm: 0;
+  --r: 2px;
+  --r-lg: 3px;
+  --stroke: 1px;
+
+  /* Type */
+  --display: "Major Mono Display", "Courier New", monospace;
+  --stencil-font: "Big Shoulders Stencil Display", "Impact", sans-serif;
+  --mono: "Space Mono", ui-monospace, "JetBrains Mono", "Menlo", monospace;
+
+  font-family: var(--mono);
+  color-scheme: dark;
+
+  /* hazard chevron tape — for critical edges only */
+  --hazard-tape: repeating-linear-gradient(
+    -45deg,
+    var(--hazard) 0 8px,
+    var(--bg-0) 8px 16px
+  );
 }
 
 *,
@@ -27,17 +63,31 @@
   box-sizing: border-box;
 }
 
+::selection {
+  background: var(--phosphor);
+  color: var(--bg-0);
+}
+
 html,
 body {
-  height: 100%;
   margin: 0;
-  background: var(--bg0);
+  min-height: 100%;
+  background: var(--bg-0);
   color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
-  min-height: 100%;
+  min-height: 100dvh;
+  isolation: isolate;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Backdrop: vector grid + scanlines + dim phosphor pool.
+   No magenta or cyan accents — single-channel CRT.
+   ───────────────────────────────────────────────────────────────── */
 
 .mesh {
   position: fixed;
@@ -45,49 +95,100 @@ body {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background: radial-gradient(1200px 800px at 10% 20%, rgba(108, 240, 200, 0.12), transparent 55%),
-    radial-gradient(900px 700px at 90% 10%, rgba(200, 108, 255, 0.14), transparent 50%),
-    radial-gradient(800px 600px at 50% 100%, rgba(80, 140, 255, 0.1), transparent 45%), var(--bg0);
+  background:
+    radial-gradient(120% 90% at 50% 110%, rgba(34, 255, 119, 0.04), transparent 60%),
+    radial-gradient(80% 60% at 0% 0%, rgba(34, 255, 119, 0.025), transparent 70%),
+    var(--bg-0);
 }
 
+/* tactical grid — dim, single-color */
+.mesh::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background-image:
+    linear-gradient(to right, rgba(34, 255, 119, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 255, 119, 0.025) 1px, transparent 1px),
+    linear-gradient(to right, rgba(34, 255, 119, 0.012) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 255, 119, 0.012) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 16px 16px, 16px 16px;
+  mask-image: radial-gradient(85% 85% at 50% 50%, #000 0%, transparent 95%);
+  -webkit-mask-image: radial-gradient(85% 85% at 50% 50%, #000 0%, transparent 95%);
+}
+
+/* heavier CRT scanlines */
+.mesh::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.34) 3px,
+      rgba(0, 0, 0, 0.34) 3px
+    );
+  mix-blend-mode: multiply;
+  opacity: 1;
+  animation: scan 7s linear infinite, flicker 6.4s steps(2) infinite;
+}
+
+@keyframes scan {
+  from { transform: translateY(0); }
+  to   { transform: translateY(3px); }
+}
+
+@keyframes flicker {
+  0%, 96%, 100% { opacity: 1; }
+  97%           { opacity: 0.92; }
+  98%           { opacity: 1; }
+  99%           { opacity: 0.88; }
+}
+
+/* phosphor pool blobs — only amber, very dim */
 .orb {
   position: absolute;
-  width: 42vmin;
-  height: 42vmin;
   border-radius: 50%;
-  filter: blur(40px);
-  opacity: 0.35;
-  animation: float 18s ease-in-out infinite alternate;
+  filter: blur(90px);
+  opacity: 0.28;
   pointer-events: none;
+  animation: drift 26s ease-in-out infinite alternate;
 }
 .orb.a {
-  left: -8vmin;
-  top: 10vh;
-  background: radial-gradient(circle at 30% 30%, var(--accent), transparent 70%);
-}
-.orb.b {
-  right: -12vmin;
-  top: 30vh;
-  background: radial-gradient(circle at 40% 40%, var(--accent2), transparent 70%);
-  animation-duration: 22s;
-}
-.orb.c {
-  left: 20vw;
-  bottom: -10vmin;
   width: 50vmin;
   height: 50vmin;
-  background: radial-gradient(circle at 50% 50%, rgba(120, 160, 255, 0.9), transparent 65%);
-  animation-duration: 26s;
+  left: -12vmin;
+  top: 8vh;
+  background: radial-gradient(circle at 40% 40%, var(--phosphor), transparent 70%);
+}
+.orb.b {
+  width: 46vmin;
+  height: 46vmin;
+  right: -14vmin;
+  top: 35vh;
+  background: radial-gradient(circle at 50% 50%, var(--phosphor), transparent 70%);
+  opacity: 0.18;
+  animation-duration: 32s;
+}
+.orb.c {
+  width: 56vmin;
+  height: 56vmin;
+  left: 30vw;
+  bottom: -16vmin;
+  background: radial-gradient(circle at 50% 50%, var(--phosphor-dim), transparent 65%);
+  animation-duration: 38s;
+  opacity: 0.22;
 }
 
-@keyframes float {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(3vw, -2vh, 0) scale(1.08);
-  }
+@keyframes drift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(3vw, -3vh, 0); }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Shell: the main field-console column.
+   ───────────────────────────────────────────────────────────────── */
 
 .shell {
   position: relative;
@@ -96,149 +197,897 @@ body {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  max-width: 920px;
+  max-width: 940px;
   margin: 0 auto;
-  padding: clamp(12px, 3vw, 24px);
-  padding-bottom: env(safe-area-inset-bottom, 12px);
+  padding: clamp(14px, 3vw, 28px);
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+  gap: 12px;
+  transition: max-width 0.3s ease;
+}
+.shell--with-share {
+  max-width: 1500px;
 }
 
-.topbar {
+.layout {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 12px;
-  margin-bottom: 16px;
+  flex: 1;
+  min-height: 0;
+}
+.shell--with-share .layout {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* classification banner — dim, austere terminal printout */
+.shell::before {
+  content: "> CIPHER ALPHA-7  ::  EYES ONLY  ::  AES-GCM/256  ::  LAN-NET ONLY  ::  EPHEMERAL  ::  CIPHER ALPHA-7  ::  EYES ONLY  ::  AES-GCM/256  ::  LAN-NET ONLY  ::  EPHEMERAL  ::  CIPHER ALPHA-7  ::  EYES ONLY  ::  AES-GCM/256";
+  display: block;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  color: var(--phosphor-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  background: var(--bg-1);
+  border: var(--stroke) solid var(--olive-2);
+  padding: 5px 12px;
+  border-radius: var(--r-sm);
+  text-transform: uppercase;
+}
+
+/* ─── masthead ─── */
+
+.topbar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 16px;
+  padding: 22px 14px 14px;
+  background: var(--bg-1);
+  border: var(--stroke) solid var(--olive-2);
+  border-radius: var(--r-sm);
+}
+
+/* targeting brackets in corners */
+.topbar::before,
+.topbar::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 1.4px solid var(--phosphor-dim);
+  pointer-events: none;
+}
+.topbar::before {
+  top: -1px;
+  left: -1px;
+  border-right: none;
+  border-bottom: none;
+}
+.topbar::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: none;
+  border-top: none;
 }
 
 .brand {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  position: relative;
 }
+.brand::before {
+  content: "[ CALLSIGN ]";
+  position: absolute;
+  top: -22px;
+  left: 0;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.22em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
 .brand h1 {
   margin: 0;
-  font-size: 1.35rem;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.2rem, 6vw, 3.6rem);
+  line-height: 0.9;
   letter-spacing: 0.04em;
-  font-weight: 650;
-}
-.brand p {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--muted);
+  color: var(--phosphor);
+  text-transform: lowercase;
+  position: relative;
+  display: inline-block;
+  text-shadow:
+    0 0 4px rgba(34, 255, 119, 0.6),
+    0 0 14px rgba(34, 255, 119, 0.18);
+  animation: phosphor-flicker 5.6s steps(1) infinite;
 }
 
+/* phosphor decay ghost — single amber-dim ghost behind, no chromatic split */
+.brand h1::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: var(--phosphor-dim);
+  transform: translate(0, 1px);
+  z-index: -1;
+  opacity: 0.55;
+  filter: blur(0.4px);
+  text-shadow: none;
+}
+
+@keyframes phosphor-flicker {
+  0%, 91%, 100% { opacity: 1; }
+  92%           { opacity: 0.65; }
+  93%           { opacity: 1; }
+  94%           { opacity: 0.85; }
+  95%           { opacity: 1; }
+}
+
+.brand p {
+  margin: 4px 0 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  color: var(--phosphor-dim);
+  text-transform: uppercase;
+}
+.brand p strong {
+  font-weight: 700;
+  color: var(--bg-0);
+  background: var(--phosphor);
+  padding: 1px 6px;
+  margin-left: 4px;
+  letter-spacing: 0.12em;
+  border-radius: 0;
+}
+
+.topbar > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* "stencil" pill */
 .pill {
-  border: 1px solid var(--stroke);
-  background: var(--glass);
-  color: var(--ink);
-  border-radius: 999px;
-  padding: 8px 14px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: var(--stroke) solid var(--phosphor-dim);
+  background: var(--bg-1);
+  color: var(--phosphor);
+  border-radius: 0;
+  padding: 8px 14px 7px;
+  font-family: var(--stencil-font);
+  font-weight: 700;
   font-size: 0.85rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   cursor: pointer;
-  backdrop-filter: blur(12px);
+  transition: all 0.15s ease;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.pill::before {
+  content: "▸";
+  color: var(--phosphor-dim);
+  font-size: 0.85em;
+  line-height: 1;
 }
 .pill:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  background: var(--phosphor);
+  color: var(--bg-0);
+  border-color: var(--phosphor);
+  box-shadow: 0 0 10px var(--phosphor-glow);
+}
+.pill:hover::before { color: var(--bg-0); }
+
+/* ─── operational briefing panel ─── */
+
+.shell .box {
+  position: relative;
+  padding: 26px 18px 18px;
+  border: var(--stroke) solid var(--olive-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-1);
+  font-family: var(--mono);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--phosphor-mid);
+  overflow: hidden;
+}
+.shell .box::before {
+  content: "▮  OPERATIONAL  BRIEFING  ▮";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.32em;
+  color: var(--bg-0);
+  background: var(--phosphor);
+  padding: 4px 12px;
+  text-align: center;
+}
+.shell .box::after {
+  /* hazard tape on the bottom — only critical edges */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--hazard-tape);
+  background-size: 24px 24px;
+  opacity: 0.6;
+}
+.shell .box code {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.85em;
+  background: var(--bg-0);
+  border: 1px solid var(--phosphor-dim);
+  color: var(--phosphor);
+  padding: 1px 6px;
+  border-radius: 0;
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   Stream: the SIGINT feed.
+   ───────────────────────────────────────────────────────────────── */
+
 .stream {
+  position: relative;
   flex: 1;
   min-height: 40dvh;
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius);
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(16px);
-  padding: 14px;
+  border: var(--stroke) solid var(--olive-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-1);
+  background-image:
+    linear-gradient(to right, rgba(34, 255, 119, 0.018) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 255, 119, 0.018) 1px, transparent 1px);
+  background-size: 24px 24px;
+  padding: 28px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow: hidden;
+}
+
+/* "// SIGINT FEED //" strip — amber, no neon */
+.stream::before {
+  content: "▶  SIGINT FEED  ◀  REAL-TIME  ◀  CIPHER LIVE";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-0);
+  border-bottom: var(--stroke) solid var(--olive-2);
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  color: var(--phosphor);
+  padding: 5px 14px;
+}
+
+.stream::after {
+  content: "";
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  border: 1.4px solid var(--phosphor-dim);
+  border-left: none;
+  border-top: none;
+  pointer-events: none;
 }
 
 .stream-scroll {
   flex: 1;
   overflow-y: auto;
-  padding-right: 4px;
+  overflow-x: hidden;
+  padding: 4px 8px 4px 4px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--olive-2) transparent;
 }
+
+.stream-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.stream-scroll::-webkit-scrollbar-thumb {
+  background: var(--olive-2);
+  border-radius: 0;
+  border: 1px solid var(--phosphor-dim);
+}
+.stream-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* empty stream — austere radar sweep */
+.stream-scroll:empty::before {
+  content: "";
+  display: block;
+  height: 220px;
+  margin: 28px auto 12px;
+  width: 220px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 220' fill='none' stroke='%2322ff77' stroke-width='1.1'><circle cx='110' cy='110' r='100' opacity='0.5'/><circle cx='110' cy='110' r='75' opacity='0.4'/><circle cx='110' cy='110' r='50' opacity='0.3'/><circle cx='110' cy='110' r='25' opacity='0.25'/><line x1='10' y1='110' x2='210' y2='110' opacity='0.35'/><line x1='110' y1='10' x2='110' y2='210' opacity='0.35'/><line x1='39' y1='39' x2='181' y2='181' opacity='0.2'/><line x1='181' y1='39' x2='39' y2='181' opacity='0.2'/><circle cx='110' cy='110' r='2.5' fill='%2322ff77' stroke='none'/></svg>");
+  filter: drop-shadow(0 0 4px rgba(34, 255, 119, 0.35));
+}
+.stream-scroll:empty::after {
+  content: "▮ STANDING BY · NO CHATTER ▮";
+  display: block;
+  text-align: center;
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.28em;
+  color: var(--phosphor);
+  margin-bottom: 24px;
+  animation: blink 1.6s steps(2) infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Message node: a SIGINT intercept card. All amber.
+   ───────────────────────────────────────────────────────────────── */
 
 .node {
   position: relative;
-  border-radius: 16px;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 8, 20, 0.55);
-  transform: perspective(900px) rotateX(2deg);
-  transition: transform 0.35s ease, border-color 0.25s ease, box-shadow 0.35s ease;
+  border: var(--stroke) solid var(--olive-2);
+  border-left: 2px solid var(--phosphor-dim);
+  border-radius: 0;
+  padding: 22px 14px 14px 16px;
+  background: var(--bg-2);
+  transition: border-color 0.15s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  animation: card-in 0.3s ease-out both;
 }
+
+.node::before {
+  content: "▸ INTERCEPT";
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--olive-2);
+  color: var(--phosphor);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+
+/* signal-strength bars top-right */
+.node::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  width: 22px;
+  height: 12px;
+  background-image:
+    linear-gradient(to top, var(--phosphor) 0 100%),
+    linear-gradient(to top, var(--phosphor) 0 100%),
+    linear-gradient(to top, var(--phosphor) 0 100%),
+    linear-gradient(to top, var(--olive-2) 0 100%);
+  background-size: 3px 25%, 3px 50%, 3px 75%, 3px 100%;
+  background-position: 0 100%, 7px 100%, 14px 100%, 21px 100%;
+  background-repeat: no-repeat;
+  opacity: 0.7;
+}
+
+.node:nth-child(even) {
+  border-left-color: var(--phosphor);
+}
+.node:nth-child(even)::before {
+  content: "▸ TRACE";
+}
+.node:nth-child(3n)::before {
+  content: "▸ COMM-LOG";
+}
+
 .node:hover {
-  transform: perspective(900px) rotateX(0deg) translateY(-2px);
-  border-color: rgba(108, 240, 200, 0.35);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  border-left-color: var(--phosphor);
+  border-color: var(--phosphor-dim);
+  box-shadow: 0 0 0 1px var(--phosphor-soft) inset;
+  transform: translateX(2px);
 }
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
 .node-meta {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--olive-2);
   font-size: 0.78rem;
-  color: var(--muted);
 }
 .node-user {
-  color: var(--accent);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.14em;
+  color: var(--phosphor);
+  text-transform: uppercase;
+  position: relative;
+  padding-left: 22px;
+}
+.node-user::before {
+  content: "OP─";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.78em;
+  letter-spacing: 0.05em;
 }
 .node-time {
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
+.node-time::before { content: "[T+"; }
+.node-time::after  { content: "Z]"; }
 
 .node-body {
-  font-size: 0.98rem;
-  line-height: 1.45;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  line-height: 1.6;
   word-break: break-word;
+  color: var(--phosphor-mid);
+}
+.node-body a {
+  color: var(--phosphor);
+  text-decoration-color: var(--phosphor-dim);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
 }
 
 .node-media {
-  margin-top: 10px;
-  border-radius: 12px;
+  margin-top: 12px;
+  border: var(--stroke) solid var(--olive-2);
+  border-radius: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #000;
+  position: relative;
 }
 .node-media img,
 .node-media video {
   display: block;
   width: 100%;
-  max-height: 360px;
+  max-height: 380px;
   object-fit: contain;
   background: #000;
 }
 .node-media audio {
   width: 100%;
+  background: var(--bg-2);
 }
+
+.node-media--audio {
+  background: transparent;
+  border: none;
+  overflow: visible;
+  margin-top: 12px;
+}
+.node-media--audio::before,
+.node-media--audio::after {
+  /* the AudioPlayer renders its own header + cipher tag */
+  content: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Audio player — flat field-radio module. Stencil play control,
+   sliding-rule scrub, monospace timecode, CSS-only VU meter.
+   ───────────────────────────────────────────────────────────────── */
+
+.audio-player {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border: var(--stroke) solid var(--olive-2);
+  border-left: 2px solid var(--phosphor-dim);
+  font-family: var(--mono);
+  /* keep an internal hidden <audio> from leaking layout */
+}
+.audio-player audio {
+  display: none;
+}
+.audio-player.is-playing {
+  border-left-color: var(--phosphor);
+  box-shadow: 0 0 0 1px var(--phosphor-soft) inset;
+}
+
+.audio-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  background: var(--bg-0);
+  border-bottom: 1px dashed var(--olive-2);
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.66rem;
+  letter-spacing: 0.24em;
+  color: var(--phosphor);
+  text-transform: uppercase;
+}
+.audio-tag {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-cipher {
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  color: var(--phosphor);
+  background: var(--bg-1);
+  border: 1.2px solid var(--phosphor-dim);
+  border-bottom: 2px solid var(--alert);
+  padding: 1px 7px;
+  text-transform: uppercase;
+}
+
+.audio-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 12px;
+  position: relative;
+}
+
+/* tiny grid texture inside the player to echo the SIGINT-feed backdrop */
+.audio-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(34, 255, 119, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 255, 119, 0.025) 1px, transparent 1px);
+  background-size: 18px 18px;
+  opacity: 0.5;
+}
+.audio-row > * {
+  position: relative;
+  z-index: 1;
+}
+
+.audio-play {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-0);
+  color: var(--phosphor);
+  border: 1.4px solid var(--phosphor-dim);
+  border-bottom: 2px solid var(--alert);
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease,
+    transform 0.08s ease;
+  /* notched corners, matching .icon-btn for cohesion */
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+}
+.audio-play svg {
+  filter: drop-shadow(0 0 1.5px rgba(34, 255, 119, 0.45));
+}
+.audio-play:hover {
+  background: var(--phosphor);
+  color: var(--bg-0);
+  box-shadow: 0 0 12px var(--phosphor-glow);
+}
+.audio-play:active {
+  transform: translateY(1px);
+}
+.audio-player.is-playing .audio-play {
+  background: var(--phosphor);
+  color: var(--bg-0);
+  box-shadow: 0 0 14px var(--phosphor-glow);
+}
+
+/* Track — sliding-rule scrubber. The 21-tick scale above, the bar below. */
+.audio-track {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 36px;
+  padding-bottom: 2px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  touch-action: none;
+}
+.audio-track:focus-visible .audio-track-bar {
+  box-shadow: 0 0 0 1px var(--phosphor-soft) inset;
+}
+
+.audio-track-ticks {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 14px;
+  margin-bottom: 4px;
+}
+.audio-tick {
+  width: 1px;
+  height: 5px;
+  background: var(--phosphor-dim);
+  opacity: 0.55;
+}
+.audio-tick.major {
+  height: 9px;
+  opacity: 0.85;
+  background: var(--phosphor);
+}
+
+.audio-track-bar {
+  position: relative;
+  height: 6px;
+  background: var(--bg-0);
+  border: 1px solid var(--olive-2);
+  border-bottom-color: var(--phosphor-dim);
+}
+.audio-track-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    var(--phosphor-dim) 0%,
+    var(--phosphor) 70%,
+    var(--phosphor) 100%
+  );
+  box-shadow: 0 0 6px var(--phosphor-glow);
+  transition: width 0.12s linear;
+}
+.audio-track-head {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  background: var(--phosphor);
+  transform: translateX(-50%);
+  box-shadow: 0 0 6px var(--phosphor-glow), 0 0 1px var(--bg-0);
+  transition: left 0.12s linear;
+}
+
+/* Timecode — bracketed monospace, tabular-nums for stable width */
+.audio-time {
+  font-family: var(--mono);
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--phosphor);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--bg-0);
+  border: 1px solid var(--olive-2);
+  border-bottom: 1.4px solid var(--phosphor-dim);
+}
+.audio-time-cur {
+  color: var(--phosphor);
+  text-shadow: 0 0 4px var(--phosphor-glow);
+}
+.audio-time-sep {
+  color: var(--ink-faint);
+  padding: 0 1px;
+}
+.audio-time-dur {
+  color: var(--phosphor-dim);
+}
+
+/* VU meter — five bars, animated bottom-anchored heights. Pure decoration:
+   without WebAudio analysis we can't read true levels, so the bars sweep
+   pseudo-randomly with staggered keyframes when audio is playing, and
+   collapse to dim flat resting heights otherwise. */
+.audio-vu {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 28px;
+  padding: 0 2px;
+}
+.audio-vu span {
+  display: block;
+  width: 4px;
+  height: 30%;
+  background: var(--phosphor-dim);
+  transform-origin: bottom;
+  transition: background 0.18s ease;
+}
+.audio-player.is-playing .audio-vu span {
+  background: var(--phosphor);
+  animation: vu-pulse 0.9s ease-in-out infinite;
+}
+.audio-player.is-playing .audio-vu span:nth-child(1) { animation-delay: 0s;    animation-duration: 0.74s; }
+.audio-player.is-playing .audio-vu span:nth-child(2) { animation-delay: 0.18s; animation-duration: 0.96s; }
+.audio-player.is-playing .audio-vu span:nth-child(3) { animation-delay: 0.06s; animation-duration: 0.62s; }
+.audio-player.is-playing .audio-vu span:nth-child(4) { animation-delay: 0.32s; animation-duration: 0.84s; }
+.audio-player.is-playing .audio-vu span:nth-child(5) { animation-delay: 0.12s; animation-duration: 1.08s; }
+
+@keyframes vu-pulse {
+  0%   { height: 18%; }
+  20%  { height: 92%; }
+  35%  { height: 42%; }
+  55%  { height: 78%; }
+  72%  { height: 30%; }
+  88%  { height: 64%; }
+  100% { height: 22%; }
+}
+
+@media (max-width: 520px) {
+  .audio-row {
+    flex-wrap: wrap;
+  }
+  .audio-track {
+    flex-basis: 100%;
+    order: 4;
+  }
+  .audio-time {
+    font-size: 0.74rem;
+  }
+}
+
+.node-media::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 12px;
+  height: 12px;
+  border: 1.4px solid var(--phosphor-dim);
+  border-right: none;
+  border-bottom: none;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* AES-GCM stencil — amber, with a thin red "armed" underline */
+.node-media::after {
+  content: "AES-GCM";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  padding: 2px 8px;
+  background: var(--bg-0);
+  color: var(--phosphor);
+  border: 1.2px solid var(--phosphor-dim);
+  border-bottom: 2px solid var(--alert);
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+/* ─── link chip ─── */
 
 .link-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(200, 108, 255, 0.12);
-  border: 1px solid rgba(200, 108, 255, 0.35);
-  color: var(--ink);
+  padding: 6px 12px;
+  border-radius: 0;
+  background: var(--bg-1);
+  border: var(--stroke) solid var(--phosphor-dim);
+  color: var(--phosphor);
   text-decoration: none;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  transition: all 0.15s ease;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+.link-chip::before {
+  content: "↗";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: var(--phosphor);
+  color: var(--bg-0);
+  font-weight: 700;
+  font-size: 0.85em;
+  flex-shrink: 0;
 }
 .link-chip:hover {
-  border-color: rgba(200, 108, 255, 0.6);
+  background: var(--phosphor);
+  color: var(--bg-0);
+  border-color: var(--phosphor);
+  box-shadow: 0 0 8px var(--phosphor-glow);
+}
+.link-chip:hover::before {
+  background: var(--bg-0);
+  color: var(--phosphor);
 }
 
 .link-block {
@@ -247,24 +1096,97 @@ body {
   gap: 10px;
   align-items: flex-start;
   max-width: 100%;
+  margin-top: 4px;
+}
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
+/* Per-viewer embed switch — local state, doesn't propagate. Reads as a
+   physical toggle on the side of the intercept card. */
+.link-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: var(--stroke) solid var(--olive-2);
+  border-bottom: 2px solid var(--phosphor-dim);
+  background: var(--bg-0);
+  color: var(--phosphor-dim);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 4px 9px 3px;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.link-toggle:hover {
+  border-color: var(--phosphor-dim);
+  color: var(--phosphor);
+}
+.link-toggle.on {
+  background: var(--bg-0);
+  color: var(--phosphor);
+  border-color: var(--phosphor-dim);
+  border-bottom-color: var(--alert);
+  box-shadow: inset 0 0 0 1px var(--phosphor-soft);
+}
+.link-toggle-glyph {
+  font-size: 0.92rem;
+  line-height: 1;
+  color: var(--phosphor);
+  letter-spacing: 0;
+  display: inline-flex;
+}
+.link-toggle:not(.on) .link-toggle-glyph {
+  color: var(--phosphor-dim);
+}
+.link-toggle-label {
+  letter-spacing: 0.24em;
+}
+
+/* ─── link embed shells ─── */
+
 .link-embed-shell {
+  position: relative;
   width: 100%;
-  max-width: 420px;
-  border-radius: 12px;
+  max-width: 460px;
+  border-radius: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #050508;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border: var(--stroke) solid var(--phosphor-dim);
+  background: #000;
+  box-shadow: 0 0 0 1px var(--bg-0);
+}
+.link-embed-shell::before {
+  content: "▶ VIS-FEED · LIVE";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  background: var(--bg-0);
+  color: var(--phosphor);
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  padding: 5px 10px;
+  pointer-events: none;
+  border-bottom: 1px solid var(--olive-2);
 }
 
 .link-embed-aspect {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  max-height: 220px;
-  margin: 0 auto;
+  max-height: 240px;
+  margin: 26px auto 0;
   background: #000;
 }
 
@@ -276,234 +1198,1372 @@ body {
   border: 0;
 }
 
-.link-embed-shell--page .link-embed-iframe-page {
-  display: block;
-  width: 100%;
-  height: 220px;
-  border: 0;
-  background: #fff;
-}
-
 .link-embed-video {
   display: block;
   width: 100%;
-  max-height: 220px;
+  max-height: 240px;
   object-fit: contain;
   background: #000;
+  margin-top: 26px;
 }
 
 .link-embed-note {
   margin: 0;
-  padding: 8px 10px;
-  font-size: 0.72rem;
-  color: var(--muted);
-  line-height: 1.35;
+  padding: 7px 12px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  background: var(--bg-0);
+  border-top: 1px dashed var(--olive-2);
+  line-height: 1.5;
 }
 
-.composer-col {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* ─────────────────────────────────────────────────────────────────
+   LinkPreviewCard — TARGET DOSSIER. Server scrapes <head> meta and we
+   render a phosphor-bordered card with thumbnail, title, description,
+   and a footer with the destination URL. Replaces the iframe-page
+   approach which X-Frame-Options usually refused anyway.
+   ───────────────────────────────────────────────────────────────── */
+
+.link-card {
+  position: relative;
+  display: block;
   width: 100%;
+  max-width: 560px;
+  text-decoration: none;
+  color: inherit;
+  background: var(--bg-1);
+  border: var(--stroke) solid var(--olive-2);
+  border-left: 2px solid var(--phosphor-dim);
+  font-family: var(--mono);
+  overflow: hidden;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.18s ease;
+  animation: card-in 0.28s ease-out both;
+}
+a.link-card:hover {
+  border-color: var(--phosphor-dim);
+  border-left-color: var(--phosphor);
+  box-shadow: 0 0 0 1px var(--phosphor-soft) inset, 0 0 14px rgba(34, 255, 119, 0.08);
+  transform: translateX(2px);
+}
+a.link-card:hover .link-card-title {
+  color: var(--phosphor);
+  text-shadow: 0 0 6px var(--phosphor-glow);
+}
+a.link-card:hover .link-card-arrow {
+  background: var(--phosphor);
+  color: var(--bg-0);
+}
+a.link-card:hover .link-card-thumb img {
+  filter: contrast(1.1) saturate(0.85);
 }
 
-.embed-page-toggle {
+.link-card-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  font-size: 0.8rem;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-  line-height: 1.35;
+  padding: 5px 10px;
+  background: var(--bg-0);
+  border-bottom: 1px dashed var(--olive-2);
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.66rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
 }
-
-.embed-page-toggle input {
-  margin-top: 3px;
+.link-card-tag {
+  color: var(--phosphor);
   flex-shrink: 0;
 }
+.link-card-host {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  color: var(--phosphor-dim);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-.composer {
-  margin-top: 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--stroke);
-  background: rgba(8, 6, 14, 0.75);
-  padding: 10px;
+.link-card-body {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.link-card.has-image .link-card-body {
+  min-height: 120px;
+}
+.link-card-thumb {
+  flex-shrink: 0;
+  width: 152px;
+  background: var(--bg-0);
+  border-right: 1px dashed var(--olive-2);
+  position: relative;
+  overflow: hidden;
+}
+.link-card-thumb::after {
+  /* corner bracket — recon target marker */
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  width: 14px;
+  height: 14px;
+  border: 1.4px solid var(--phosphor-dim);
+  border-right: none;
+  border-top: none;
+  pointer-events: none;
+}
+.link-card-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: contrast(1.05) saturate(0.7);
+  transition: filter 0.18s ease;
+}
+.link-card-text {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px 14px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+.link-card-title {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: var(--phosphor-mid);
+  text-transform: lowercase;
+  /* clamp to 2 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.16s ease, text-shadow 0.16s ease;
+}
+.link-card-desc {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.link-card-foot {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  backdrop-filter: blur(14px);
+  padding: 5px 10px 6px;
+  background: var(--bg-0);
+  border-top: 1px dashed var(--olive-2);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.link-card-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: var(--phosphor);
+  color: var(--bg-0);
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.link-card-link {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
+/* loading state — single phosphor pulse bar to evoke a CRT scanning beam */
+.link-card--loading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.link-card--loading .link-card-tag {
+  color: var(--phosphor);
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.66rem;
+  letter-spacing: 0.24em;
+}
+.link-card--loading .link-card-host {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  text-align: left;
+}
+.link-card-loadbar {
+  flex: 1 0 100%;
+  position: relative;
+  height: 3px;
+  background: var(--bg-0);
+  border: 1px solid var(--olive-2);
+  overflow: hidden;
+  margin: 4px 0 2px;
+}
+.link-card-loadbar span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--phosphor) 50%,
+    transparent
+  );
+  animation: scan-beam 1.4s linear infinite;
+}
+@keyframes scan-beam {
+  0%   { left: -32%; }
+  100% { left: 100%; }
+}
+.link-card-loadtxt {
+  flex: 1 0 100%;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+/* error / empty / blocked state */
+.link-card--error,
+.link-card--empty,
+.link-card--blocked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 8px 12px;
+  border-left-color: var(--alert);
+}
+.link-card--empty {
+  border-left-color: var(--hazard);
+}
+.link-card--blocked {
+  border-left-color: var(--hazard);
+  /* hazard-tape stripe along the right edge to read as "gated" */
+  background-image: var(--hazard-tape);
+  background-size: 8px 8px;
+  background-position: top right;
+  background-repeat: no-repeat;
+  /* limit the tape to a 4px sliver on the right edge using a mask */
+  background-clip: padding-box;
+}
+.link-card--blocked .link-card-tag {
+  color: var(--hazard);
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+}
+.link-card--error .link-card-tag {
+  color: var(--alert);
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+}
+.link-card--empty .link-card-tag {
+  color: var(--hazard);
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+}
+.link-card--error .link-card-host,
+.link-card--empty .link-card-host {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.02em;
+  text-align: left;
+}
+.link-card-errtxt {
+  flex: 1 0 100%;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+@media (max-width: 520px) {
+  .link-card-body {
+    flex-direction: column;
+  }
+  .link-card-thumb {
+    width: 100%;
+    height: 140px;
+    border-right: none;
+    border-bottom: 1px dashed var(--olive-2);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Composer: the TX console.
+   ───────────────────────────────────────────────────────────────── */
+
+.composer {
+  position: relative;
+  margin-top: 6px;
+  border: var(--stroke) solid var(--olive-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-1);
+  padding: 28px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.composer::before {
+  content: "▮ TX CONSOLE  ::  KEY: AES-GCM/256  ::  CHAN: LAN-NET  ::  ARMED ▮";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-0);
+  color: var(--phosphor);
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--olive-2);
+}
+
+/* hazard tape on the bottom edge */
+.composer::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 3px;
+  background: var(--hazard-tape);
+  background-size: 16px 16px;
+  opacity: 0.5;
 }
 
 .composer-row {
   display: flex;
-  gap: 8px;
-  align-items: flex-end;
+  gap: 10px;
+  align-items: stretch;
   flex-wrap: wrap;
+}
+
+.composer-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+/* Input shell — the textarea + its inline hardware tools + a staging tray
+   for attached files. Reads as a single console panel rather than a stack
+   of detached widgets. */
+.input-shell {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 input.input,
 textarea.input {
   flex: 1;
-  min-height: 48px;
-  max-height: 160px;
+  min-height: 50px;
+  max-height: 180px;
   resize: vertical;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--ink);
+  border-radius: 0;
+  border: var(--stroke) solid var(--olive-2);
+  border-bottom: 2px solid var(--phosphor-dim);
+  background: var(--bg-0);
+  color: var(--phosphor-mid);
   padding: 12px 14px;
-  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  line-height: 1.5;
   outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  caret-color: var(--phosphor);
 }
-textarea.input:focus {
-  border-color: rgba(108, 240, 200, 0.45);
-  box-shadow: 0 0 0 3px rgba(108, 240, 200, 0.12);
+.input-shell textarea.input {
+  width: 100%;
+  padding-bottom: 48px; /* leave room for the tool dock */
+}
+textarea.input::placeholder,
+input.input::placeholder {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+textarea.input:focus,
+input.input:focus {
+  border-color: var(--phosphor-dim);
+  border-bottom-color: var(--phosphor);
+  box-shadow: 0 0 0 1px var(--phosphor-soft);
 }
 
-.btn {
-  border: none;
-  border-radius: 12px;
-  padding: 12px 16px;
-  font-weight: 600;
-  cursor: pointer;
-  font: inherit;
-  background: linear-gradient(135deg, var(--accent), #3ad4ff);
-  color: #04120f;
+/* Tool dock — sits inside the textarea's bottom-left, separated from the
+   text area by a thin phosphor rule, like a hardware bezel. */
+.input-tools {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 6px;
+  z-index: 1;
+  pointer-events: auto;
 }
-.btn:disabled {
-  opacity: 0.45;
+
+.icon-btn {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 0;
+  border: var(--stroke) solid var(--phosphor-dim);
+  background: var(--bg-0);
+  color: var(--phosphor);
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease,
+    background 0.12s ease, transform 0.12s ease;
+  /* tiny corner notches to match the targeting/bracket motif */
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+}
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  filter: drop-shadow(0 0 1.5px rgba(34, 255, 119, 0.35));
+}
+.icon-btn:hover:not(:disabled) {
+  border-color: var(--phosphor);
+  color: var(--phosphor);
+  box-shadow: 0 0 10px var(--phosphor-glow), inset 0 0 0 1px var(--phosphor-soft);
+}
+.icon-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.icon-btn:disabled {
+  border-color: var(--olive-2);
+  color: var(--ink-faint);
   cursor: not-allowed;
 }
-.btn-ghost {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ink);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+.icon-btn:disabled svg {
+  filter: none;
 }
 
-.hint {
-  font-size: 0.78rem;
-  color: var(--muted);
+/* armed-share variant — alert-red bottom edge + filled phosphor when broadcasting */
+.icon-btn--share.on {
+  background: var(--phosphor);
+  color: var(--bg-0);
+  border-color: var(--phosphor);
+  border-bottom: 2px solid var(--alert);
+  animation: tool-armed 1.4s steps(2) infinite;
 }
+.icon-btn--share.on svg {
+  filter: drop-shadow(0 0 1.4px rgba(255, 51, 68, 0.55));
+}
+@keyframes tool-armed {
+  0%, 100% { box-shadow: 0 0 10px var(--phosphor-glow); }
+  50%      { box-shadow: 0 0 18px var(--ok-glow); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Payload tray — staged attachments awaiting transmit. Renders as a
+   munitions rack docked to the top of the input frame: a stencil tag,
+   then a horizontally scrolling row of chips with thumb / kind glyph.
+   ───────────────────────────────────────────────────────────────── */
+
+.attach-tray {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  border: var(--stroke) solid var(--olive-2);
+  border-bottom: none;
+  background: var(--bg-1);
+  padding: 6px 8px 8px;
+  animation: card-in 0.22s ease-out both;
+}
+.attach-tray::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  border-bottom: 1px dashed var(--olive-2);
+}
+.attach-tray-tag {
+  flex-shrink: 0;
+  align-self: flex-start;
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.66rem;
+  letter-spacing: 0.24em;
+  color: var(--phosphor);
+  background: var(--bg-0);
+  border: 1px solid var(--phosphor-dim);
+  padding: 4px 8px 3px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.attach-tray-scroll {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.input-shell.has-attach textarea.input {
+  border-top: 1px dashed var(--olive-2);
+}
+
+.attach-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--olive-2);
+  border-bottom: 2px solid var(--phosphor-dim);
+  background: var(--bg-0);
+  padding: 4px 8px 4px 4px;
+  min-width: 160px;
+  max-width: 260px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--phosphor-mid);
+  /* tiny notched corner to echo the icon-btn fastener motif */
+  clip-path: polygon(
+    4px 0,
+    100% 0,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    0 100%,
+    0 4px
+  );
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.attach-chip:hover {
+  border-color: var(--phosphor-dim);
+  box-shadow: 0 0 0 1px var(--phosphor-soft) inset;
+}
+.attach-chip.pending {
+  border-bottom-color: var(--alert);
+  animation: tool-armed 1.4s steps(2) infinite;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.attach-thumb {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-1);
+  border: 1px solid var(--olive-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+.attach-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: contrast(1.05) saturate(0.7);
+}
+.attach-kind {
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  color: var(--phosphor);
+  text-transform: uppercase;
+}
+
+.attach-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+.attach-name {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.74rem;
+  color: var(--phosphor);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.attach-size {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.attach-x {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 0;
+  border: 1px solid var(--olive-2);
+  background: var(--bg-0);
+  color: var(--phosphor-dim);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.attach-x:hover:not(:disabled) {
+  border-color: var(--alert);
+  color: var(--alert);
+  background: var(--alert-soft);
+}
+.attach-x:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.attach-x svg {
+  display: block;
+}
+
+/* ─── buttons (mil-spec stencil) ─── */
+
+/* primary TRANSMIT — amber stencil with a thin red "armed" stripe */
+.btn {
+  position: relative;
+  border: var(--stroke) solid var(--phosphor);
+  border-bottom: 2px solid var(--alert);
+  border-radius: 0;
+  padding: 11px 22px 9px;
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: var(--bg-0);
+  color: var(--phosphor);
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+.btn::before {
+  content: "▶ ";
+  display: inline;
+  margin-right: 6px;
+  color: var(--alert);
+}
+.btn:hover:not(:disabled) {
+  background: var(--phosphor);
+  color: var(--bg-0);
+  border-bottom-color: var(--alert);
+  box-shadow: 0 0 14px var(--phosphor-glow);
+}
+.btn:hover:not(:disabled)::before {
+  color: var(--alert);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.85);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: var(--olive-2);
+  border-bottom-color: var(--olive-2);
+  color: var(--ink-faint);
+}
+.btn:disabled::before { color: var(--ink-faint); }
+
+/* secondary — amber outline, no red stripe */
+.btn-ghost {
+  background: var(--bg-1);
+  color: var(--phosphor);
+  border-color: var(--phosphor-dim);
+  border-bottom: var(--stroke) solid var(--phosphor-dim);
+}
+.btn-ghost::before {
+  content: "+ ";
+  color: var(--phosphor-dim);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--phosphor);
+  color: var(--bg-0);
+  border-color: var(--phosphor);
+  border-bottom-color: var(--phosphor);
+  box-shadow: 0 0 12px var(--phosphor-glow);
+}
+.btn-ghost:hover:not(:disabled)::before {
+  color: var(--bg-0);
+}
+
+/* ─── hints + status ─── */
+
+.hint {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--olive-2);
+  border: 1.2px solid var(--olive-2);
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: middle;
+  position: relative;
+}
+.status-dot.on {
+  background: var(--ok);
+  border-color: var(--ok);
+  box-shadow: 0 0 6px var(--ok-glow), 0 0 0 0 rgba(34, 255, 119, 0.5);
+  animation: signal 1.6s ease-out infinite;
+}
+
+@keyframes signal {
+  0%   { box-shadow: 0 0 6px var(--ok-glow), 0 0 0 0 rgba(34, 255, 119, 0.55); }
+  70%  { box-shadow: 0 0 6px var(--ok-glow), 0 0 0 8px rgba(34, 255, 119, 0); }
+  100% { box-shadow: 0 0 6px var(--ok-glow), 0 0 0 0 rgba(34, 255, 119, 0); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Auth / boot panel: a "LINK FAILURE" terminal screen.
+   ───────────────────────────────────────────────────────────────── */
 
 .auth-panel {
   position: relative;
   z-index: 1;
   pointer-events: auto;
-  max-width: 420px;
+  max-width: 480px;
   margin: 8vh auto;
-  padding: 28px;
-  border-radius: 22px;
-  border: 1px solid var(--stroke);
-  background: rgba(12, 10, 22, 0.72);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
+  padding: 38px 28px 28px;
+  border: var(--stroke) solid var(--alert);
+  border-radius: var(--r-sm);
+  background: var(--bg-1);
+  box-shadow: 0 0 0 1px var(--bg-0), 0 0 26px rgba(255, 51, 68, 0.16);
+  overflow: hidden;
 }
+.auth-panel::before {
+  content: "▮ LINK FAILURE  ::  CIPHER ALPHA-7  ::  ERR-0xC0FFEE ▮";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--alert);
+  color: var(--bg-0);
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.74rem;
+  letter-spacing: 0.22em;
+  padding: 5px 12px;
+}
+.auth-panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--hazard-tape);
+  background-size: 22px 22px;
+  opacity: 0.55;
+}
+
 .auth-panel h2 {
-  margin: 0 0 6px;
-  font-size: 1.4rem;
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.8rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--alert);
+  text-transform: lowercase;
 }
 .auth-panel .sub {
   margin: 0 0 18px;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.45;
+  font-family: var(--mono);
+  color: var(--phosphor-mid);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  padding: 8px 10px;
+  background: var(--bg-0);
+  border: 1px dashed var(--olive-2);
+  border-left: 2px solid var(--alert);
+}
+.auth-panel .sub::before {
+  content: "▸ ";
+  color: var(--alert);
+}
+.auth-panel .hint {
+  font-family: var(--mono);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  display: block;
+}
+.auth-panel .hint code,
+.auth-panel code {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.85em;
+  background: var(--bg-0);
+  border: 1px solid var(--phosphor-dim);
+  color: var(--phosphor);
+  padding: 1px 6px;
+  border-radius: 0;
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .field label {
+  font-family: var(--stencil-font);
+  font-weight: 700;
   font-size: 0.78rem;
-  color: var(--muted);
-  letter-spacing: 0.04em;
+  color: var(--phosphor);
+  letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 .field input {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--ink);
+  border-radius: 0;
+  border: var(--stroke) solid var(--olive-2);
+  border-bottom: 2px solid var(--phosphor-dim);
+  background: var(--bg-0);
+  color: var(--phosphor-mid);
   padding: 12px 14px;
-  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.95rem;
   outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  caret-color: var(--phosphor);
 }
 .field input:focus {
-  border-color: rgba(108, 240, 200, 0.45);
+  border-color: var(--phosphor-dim);
+  border-bottom-color: var(--phosphor);
+  box-shadow: 0 0 0 1px var(--phosphor-soft);
 }
 
 .tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 0;
+  margin-bottom: 18px;
+  border: var(--stroke) solid var(--olive-2);
+  border-radius: 0;
+  background: var(--bg-0);
 }
 .tab {
   flex: 1;
   padding: 10px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--muted);
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
   cursor: pointer;
-  font: inherit;
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.84rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease;
+  border-right: 1px solid var(--olive-2);
 }
+.tab:last-child { border-right: none; }
 .tab.active {
-  color: var(--ink);
-  border-color: rgba(108, 240, 200, 0.35);
-  background: rgba(108, 240, 200, 0.08);
+  color: var(--bg-0);
+  background: var(--phosphor);
 }
 
 .err {
-  color: var(--danger);
-  font-size: 0.85rem;
-  margin: 0 0 10px;
+  color: var(--alert);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1.2px solid var(--alert);
+  background: var(--alert-soft);
 }
+.err::before { content: "✕ ERR · "; letter-spacing: 0.16em; }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
-  display: inline-block;
-  margin-right: 6px;
-  vertical-align: middle;
-}
-.status-dot.on {
-  background: var(--accent);
-  box-shadow: 0 0 12px rgba(108, 240, 200, 0.8);
-}
+/* ─────────────────────────────────────────────────────────────────
+   Lightbox modal — RECON inspector
+   ───────────────────────────────────────────────────────────────── */
 
 .modal-back {
   position: fixed;
   inset: 0;
   z-index: 20;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(2, 3, 2, 0.92);
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 24px;
+  border: none;
+  cursor: zoom-out;
+  backdrop-filter: blur(2px);
+}
+.modal-back::before {
+  content: "✕ CLOSE  ::  ESC";
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  color: var(--phosphor);
+  border: 1.4px solid var(--phosphor-dim);
+  padding: 6px 12px;
+}
+.modal-back::after {
+  content: "▮ RECON · IMAGE INSPECT";
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.24em;
+  color: var(--phosphor);
 }
 .modal {
-  max-width: min(96vw, 900px);
+  position: relative;
+  max-width: min(96vw, 920px);
   max-height: 90vh;
+  border: 1.4px solid var(--phosphor-dim);
+  background: var(--bg-0);
+  padding: 6px;
+  border-radius: 0;
+}
+.modal::before,
+.modal::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 1.6px solid var(--phosphor);
+  pointer-events: none;
+}
+.modal::before {
+  top: -4px;
+  left: -4px;
+  border-right: none;
+  border-bottom: none;
+}
+.modal::after {
+  bottom: -4px;
+  right: -4px;
+  border-left: none;
+  border-top: none;
 }
 .modal img,
 .modal video {
+  display: block;
   max-width: 100%;
-  max-height: 85vh;
-  border-radius: 12px;
+  max-height: 84vh;
+  border-radius: 0;
 }
 
 .hidden-input {
   display: none;
 }
 
-.shell .box {
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  line-height: 1.45;
+/* ─────────────────────────────────────────────────────────────────
+   Side panel: VIS-RELAY screen-share monitor
+   ───────────────────────────────────────────────────────────────── */
+
+.share-panel {
+  position: relative;
+  flex: 0 0 520px;
+  max-width: 60vw;
+  display: flex;
+  flex-direction: column;
+  border: var(--stroke) solid var(--olive-2);
+  border-left: 2px solid var(--phosphor);
+  background: var(--bg-1);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  animation: card-in 0.3s ease-out both;
+}
+.share-panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--hazard-tape);
+  background-size: 16px 16px;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.share-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--olive-2);
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  color: var(--phosphor);
+  text-transform: uppercase;
+}
+.share-tag {
+  color: var(--phosphor);
+}
+.share-source {
+  color: var(--phosphor-mid);
+  letter-spacing: 0.12em;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: lowercase;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-stop {
+  margin-left: auto;
+  padding: 5px 12px 4px;
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+}
+
+.share-state {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  padding: 2px 7px;
+  border: 1px solid var(--olive-2);
+  border-bottom: 1.4px solid var(--phosphor-dim);
+  background: var(--bg-1);
+  color: var(--phosphor-dim);
+  text-transform: uppercase;
+  white-space: nowrap;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.share-state--connected {
+  color: var(--phosphor);
+  border-color: var(--phosphor-dim);
+  border-bottom-color: var(--phosphor);
+  box-shadow: 0 0 6px var(--ok-glow);
+}
+.share-state--connecting {
+  color: var(--hazard);
+  border-bottom-color: var(--hazard);
+  animation: blink 1.4s steps(2) infinite;
+}
+.share-state--failed {
+  color: var(--alert);
+  border-color: var(--alert);
+  border-bottom-color: var(--alert);
+  background: var(--alert-soft);
+}
+.share-panel.state-failed {
+  border-left-color: var(--alert);
+}
+
+/* When a stop button is also present, the state badge sits before it */
+.share-head .share-stop + .share-state,
+.share-state + .share-stop {
+  margin-left: 0;
+}
+
+.share-unmute {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 3;
+  border: 1.2px solid var(--phosphor-dim);
+  border-bottom: 2px solid var(--alert);
+  background: rgba(2, 3, 2, 0.82);
+  color: var(--phosphor);
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.74rem;
+  letter-spacing: 0.22em;
+  padding: 6px 12px 5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.share-unmute:hover {
+  background: var(--phosphor);
+  color: var(--bg-0);
+  box-shadow: 0 0 12px var(--phosphor-glow);
+}
+
+.share-idle--connecting .share-idle-mark {
+  color: var(--hazard);
+  border-color: var(--hazard);
+  background: var(--bg-0);
+  border: 1.2px solid var(--hazard);
+  padding: 4px 12px;
+  animation: blink 1.4s steps(2) infinite;
+}
+.share-idle--failed .share-idle-mark {
+  color: var(--alert);
+  border: 1.2px solid var(--alert);
+  background: var(--alert-soft);
+  padding: 4px 12px;
+}
+
+.share-idle-help {
+  margin: 12px 0 0;
+  max-width: 44ch;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  text-align: center;
+  padding: 10px 12px;
+  border: 1px dashed var(--olive-2);
+  border-left: 2px solid var(--alert);
+  background: var(--bg-0);
+}
+.share-idle-help code {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.85em;
+  background: var(--bg-1);
+  border: 1px solid var(--phosphor-dim);
+  color: var(--phosphor);
+  padding: 0 5px;
+  margin: 0 2px;
+}
+.share-idle-help strong {
+  color: var(--phosphor);
+  letter-spacing: 0.04em;
+}
+
+.share-stage {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+}
+
+.share-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 76vh;
+  object-fit: contain;
+  background: #000;
+}
+
+.share-self {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+  color: var(--phosphor-mid);
+  font-family: var(--mono);
+  border: 1px dashed var(--phosphor-dim);
+  width: 100%;
+  height: 100%;
+}
+.share-self-mark {
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.28em;
+  color: var(--phosphor);
+  border: 1.4px solid var(--phosphor-dim);
+  padding: 5px 12px;
+  background: var(--bg-0);
+  text-transform: uppercase;
+  animation: blink 1.6s steps(2) infinite;
+}
+
+.share-self-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  font-family: var(--stencil-font);
+  font-weight: 800;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  color: var(--phosphor);
+  background: rgba(2, 3, 2, 0.78);
+  border: 1.2px solid var(--phosphor-dim);
+  border-bottom: 2px solid var(--alert);
+  padding: 3px 8px;
+  text-transform: uppercase;
+  pointer-events: none;
+  animation: blink 1.8s steps(2) infinite;
+}
+.share-self-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  max-width: 36ch;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+
+.share-idle {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+}
+.share-idle-mark {
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.24em;
+  color: var(--phosphor-dim);
+}
+.share-idle-sub {
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.share-err {
+  margin: 0;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--alert);
+  background: var(--alert-soft);
+  border-top: 1px solid var(--alert);
+}
+
+@media (max-width: 900px) {
+  .shell--with-share {
+    max-width: 940px;
+  }
+  .shell--with-share .layout {
+    flex-direction: column;
+  }
+  .share-panel {
+    flex: 0 0 auto;
+    max-width: 100%;
+    border-left: var(--stroke) solid var(--olive-2);
+    border-top: 2px solid var(--phosphor);
+  }
+  .share-stage {
+    min-height: 240px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile tuning
+   ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .topbar {
+    grid-template-columns: 1fr;
+  }
+  .topbar > div:last-child {
+    justify-content: flex-start;
+  }
+  .brand h1 {
+    font-size: clamp(2rem, 13vw, 3rem);
+  }
+  .composer-row .btn,
+  .composer-row .btn-ghost {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
