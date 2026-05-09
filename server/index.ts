@@ -46,6 +46,7 @@ type OutMsg = {
 type Client = { ws: WebSocket; label: string; connId: string };
 const clients = new Set<Client>();
 let currentSharer: string | null = null;
+const lastAlertAt = new Map<string, number>();
 
 type LinkPreview = {
   url: string;
@@ -645,6 +646,15 @@ async function main() {
           return;
         }
         if (!data || typeof data.event !== "string") return;
+        if (data.event === "alert") {
+          const now = Date.now();
+          const prev = lastAlertAt.get(connId) ?? 0;
+          if (now - prev < 1500) return;
+          lastAlertAt.set(connId, now);
+          const kind = typeof (data as { kind?: unknown }).kind === "string" ? (data as { kind: string }).kind : "alert";
+          broadcastExcept(connId, { event: "alert", from: connId, kind });
+          return;
+        }
         if (data.event === "signal") {
           if (typeof data.to !== "string") return;
           sendTo(data.to, { event: "signal", from: connId, data: data.data });
@@ -668,6 +678,7 @@ async function main() {
 
       socket.on("close", () => {
         clients.delete(entry);
+        lastAlertAt.delete(connId);
         if (currentSharer === connId) {
           currentSharer = null;
           broadcast({ event: "share-stop", peerId: connId });

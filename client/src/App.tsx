@@ -11,6 +11,8 @@ import {
 } from "./linkEmbed";
 import { ShareView, useScreenShare } from "./screenshare";
 import { buildZipFromFiles } from "./zipBundle";
+import { rumble } from "./rumble";
+import { armAudioOnFirstGesture, playAlertTune, playPhoneRing, playSirenShock } from "./alertTune";
 
 const URL_PATTERN = /^https?:\/\/\S+$/i;
 function isPureUrl(s: string): boolean {
@@ -533,11 +535,13 @@ export function App() {
     }
     return 380;
   });
+  const [shock, setShock] = useState<"ring" | "siren" | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const appLayoutRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
 
   const wsSend = useCallback((payload: unknown) => {
     const ws = wsRef.current;
@@ -583,6 +587,7 @@ export function App() {
   );
 
   useEffect(() => {
+    armAudioOnFirstGesture();
     let cancelled = false;
     (async () => {
       try {
@@ -664,6 +669,23 @@ export function App() {
         }
         if (data.event === "message" && data.message) mergeMessage(data.message);
         if (data.event === "message_deleted" && typeof data.id === "string") removeMessage(data.id);
+        if (data.event === "alert") {
+          const kind = typeof data.kind === "string" ? data.kind : "alert";
+          if (kind === "ring") {
+            playPhoneRing();
+            setShock("ring");
+            rumble(shellRef.current, { durationMs: 260 });
+          } else if (kind === "siren") {
+            playSirenShock();
+            setShock("siren");
+            rumble(shellRef.current, { durationMs: 520 });
+          } else {
+            playAlertTune();
+            setShock(null);
+            rumble(shellRef.current);
+          }
+          window.setTimeout(() => setShock(null), kind === "siren" ? 750 : 520);
+        }
         try {
           shareIngestRef.current(data as Parameters<typeof shareIngestRef.current>[0]);
         } catch {
@@ -795,6 +817,7 @@ export function App() {
       }
     }
     setAttachments((prev) => prev.filter((a) => failedIds.includes(a.id)));
+    if (failedIds.length > 0) rumble(shellRef.current);
 
     if (t) {
       try {
@@ -803,10 +826,18 @@ export function App() {
         mergeMessage(message);
       } catch {
         setDraft(t);
+        rumble(shellRef.current);
       }
     }
     setSending(false);
   };
+
+  const sendAlert = useCallback(
+    (kind: "ring" | "siren" | "tx") => {
+      wsSend({ event: "alert", kind });
+    },
+    [wsSend]
+  );
 
   const presence = useMemo(
     () => (
@@ -890,7 +921,7 @@ export function App() {
           />
         ) : null}
 
-        <div className={`shell shell--in-app${share.sharerId ? " shell--with-share" : ""}`}>
+        <div ref={shellRef} className={`shell shell--in-app${share.sharerId ? " shell--with-share" : ""}`}>
           <header className="topbar">
             <div className="brand">
               <h1 data-text="Helles">Helles</h1>
@@ -931,7 +962,7 @@ export function App() {
                 </div>
               </section>
 
-              <footer className="composer">
+              <footer className={`composer${sending ? " is-sending" : ""}`}>
                 <div className="composer-row">
                   <div className={`input-shell${attachments.length > 0 ? " has-attach" : ""}`}>
                     {attachments.length > 0 ? (
@@ -1004,12 +1035,35 @@ export function App() {
                       >
                         <IconScreen />
                       </button>
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn--alert"
+                        onClick={() => sendAlert("ring")}
+                        title="ring others"
+                        aria-label="ring others"
+                        disabled={!wsOn}
+                      >
+                        <span aria-hidden>☎</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn--alert"
+                        onClick={() => sendAlert("siren")}
+                        title="siren / shock others"
+                        aria-label="siren others"
+                        disabled={!wsOn}
+                      >
+                        <span aria-hidden>⚠</span>
+                      </button>
                     </div>
                   </div>
                   <button
                     type="button"
                     className="btn"
-                    onClick={() => void sendChat()}
+                    onClick={() => {
+                      sendAlert("tx");
+                      void sendChat();
+                    }}
                     disabled={sending || (!draft.trim() && attachments.length === 0)}
                   >
                     {sending ? "sending…" : "transmit"}
@@ -1068,6 +1122,15 @@ export function App() {
             <img src={lightbox} alt="" />
           </div>
         </button>
+      ) : null}
+
+      {shock ? (
+        <div className={`shock shock--${shock}`} role="status" aria-live="polite" aria-label="alert">
+          <div className="shock-frame">
+            <div className="shock-title">{shock === "siren" ? "SIREN" : "RING"}</div>
+            <div className="shock-sub">{shock === "siren" ? "INCOMING · TAKE COVER" : "INCOMING · CALL"}</div>
+          </div>
+        </div>
       ) : null}
     </>
   );
