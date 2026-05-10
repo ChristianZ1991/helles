@@ -239,6 +239,16 @@ body {
   max-width: min(1680px, 100%);
 }
 
+/* When a screen-share is active, let the app breathe to the edges of the
+   viewport so the share stage can dominate. Otherwise the 920px clamp
+   collapses both the share area and the messages column. */
+.app-root--sharing {
+  max-width: min(1880px, 100%);
+}
+.app-root--sharing.app-root--docked {
+  max-width: min(2040px, 100%);
+}
+
 .video-dock {
   flex: 0 0 auto;
   display: flex;
@@ -375,6 +385,7 @@ body {
 .shell--with-share .layout {
   flex-direction: row;
   align-items: stretch;
+  gap: 14px;
 }
 
 .console {
@@ -382,6 +393,15 @@ body {
   flex-direction: column;
   gap: 12px;
   flex: 1;
+  min-width: 0;
+}
+
+/* When sharing, the console becomes a stable left sidebar so the share
+   stage gets the rest of the horizontal real-estate. Without this clamp
+   the composer wraps badly (textarea collapses, transmit button stacks
+   under the icon row) because the panel is fighting for width. */
+.shell--with-share .console {
+  flex: 0 0 clamp(320px, 26vw, 420px);
   min-width: 0;
 }
 
@@ -1808,7 +1828,7 @@ textarea.input {
   flex: 1;
   min-height: 50px;
   max-height: 180px;
-  resize: vertical;
+  resize: none;
   border-radius: 0;
   border: var(--stroke) solid var(--olive-2);
   border-bottom: 2px solid var(--phosphor-dim);
@@ -1821,6 +1841,28 @@ textarea.input {
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   caret-color: var(--phosphor);
+  scrollbar-width: thin;
+  scrollbar-color: var(--phosphor-dim) transparent;
+}
+textarea.input::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+textarea.input::-webkit-scrollbar-track {
+  background: var(--bg-0);
+  border-left: 1px solid var(--olive-2);
+}
+textarea.input::-webkit-scrollbar-thumb {
+  background: var(--phosphor-dim);
+  border: 1px solid var(--bg-0);
+  border-radius: 0;
+}
+textarea.input::-webkit-scrollbar-thumb:hover {
+  background: var(--phosphor);
+  box-shadow: inset 0 0 4px var(--phosphor-glow);
+}
+textarea.input::-webkit-scrollbar-corner {
+  background: var(--bg-0);
 }
 .input-shell textarea.input {
   width: 100%;
@@ -2151,6 +2193,64 @@ input.input:focus {
   color: var(--ink-faint);
 }
 .btn:disabled::before { color: var(--ink-faint); }
+
+/* Compact icon-only TRANSMIT — square chip docked inside the input shell
+   at bottom-right, mirroring the icon-tools' bottom-left dock so the whole
+   composer reads as a single console panel. The animated send state lives
+   inside the SVG; .composer.is-sending pulses the wrapper for global
+   feedback. */
+.btn--transmit {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  width: 36px;
+  height: 32px;
+  min-width: 0;
+  padding: 0;
+  font-size: 0;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--stroke) solid var(--phosphor);
+  border-bottom: 2px solid var(--alert);
+  background: var(--bg-0);
+  color: var(--phosphor);
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+.btn--transmit::before {
+  content: none;
+}
+.btn--transmit svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  margin-left: 1px;
+  filter: drop-shadow(0 0 2px rgba(34, 255, 119, 0.45));
+  transition: filter 0.12s ease;
+}
+.btn--transmit:hover:not(:disabled) {
+  background: var(--phosphor);
+  color: var(--bg-0);
+  box-shadow: 0 0 12px var(--phosphor-glow);
+}
+.btn--transmit:hover:not(:disabled) svg {
+  filter: drop-shadow(0 0 3px rgba(2, 3, 2, 0.6));
+}
+.btn--transmit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn--transmit:disabled {
+  opacity: 0.45;
+  border-color: var(--olive-2);
+  border-bottom-color: var(--olive-2);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+.btn--transmit.is-sending svg {
+  filter: drop-shadow(0 0 4px var(--phosphor-glow));
+}
 
 /* secondary — amber outline, no red stripe */
 .btn-ghost {
@@ -2517,8 +2617,8 @@ input.input:focus {
 
 .share-panel {
   position: relative;
-  flex: 0 0 520px;
-  max-width: 60vw;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   border: var(--stroke) solid var(--olive-2);
@@ -2619,29 +2719,142 @@ input.input:focus {
   margin-left: 0;
 }
 
-.share-unmute {
+/* Custom HUD-style overlay for the share stage. We deliberately don't use
+   the browser's native <video controls> chrome — it would overlap our
+   stencil-aesthetic UI and inject inconsistent picture-in-picture /
+   fullscreen pills that fight the rest of the panel. The overlay fades
+   to invisible when the cursor leaves the stage so it never blocks the
+   content. */
+.share-controls {
   position: absolute;
-  bottom: 14px;
-  right: 14px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 3;
-  border: 1.2px solid var(--phosphor-dim);
-  border-bottom: 2px solid var(--alert);
-  background: rgba(2, 3, 2, 0.82);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: linear-gradient(
+    to top,
+    rgba(2, 3, 2, 0.92) 0%,
+    rgba(2, 3, 2, 0.55) 60%,
+    rgba(2, 3, 2, 0) 100%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.share-controls > * {
+  pointer-events: auto;
+}
+.share-stage:hover .share-controls,
+.share-controls:focus-within {
+  opacity: 1;
+}
+@media (hover: none) {
+  .share-controls {
+    opacity: 1;
+  }
+}
+
+.share-ctrl-spacer {
+  flex: 1;
+}
+
+.share-ctrl-idle {
+  font-family: var(--stencil-font);
+  font-weight: 700;
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  color: var(--phosphor-dim);
+  text-transform: uppercase;
+  padding: 4px 6px;
+}
+
+.share-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 4px;
+  background: rgba(2, 3, 2, 0.72);
+  border: 1px solid var(--phosphor-dim);
+  border-bottom: 1.4px solid var(--phosphor);
   color: var(--phosphor);
   font-family: var(--stencil-font);
   font-weight: 800;
-  font-size: 0.74rem;
+  font-size: 0.62rem;
   letter-spacing: 0.22em;
-  padding: 6px 12px 5px;
   text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.12s ease;
-  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  transition: background 0.12s ease, color 0.12s ease,
+    border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
 }
-.share-unmute:hover {
+.share-ctrl svg {
+  display: block;
+  filter: drop-shadow(0 0 2px rgba(34, 255, 119, 0.45));
+}
+.share-ctrl-label {
+  display: inline-block;
+  line-height: 1;
+}
+.share-ctrl:hover {
   background: var(--phosphor);
   color: var(--bg-0);
-  box-shadow: 0 0 12px var(--phosphor-glow);
+  border-color: var(--phosphor);
+  box-shadow: 0 0 10px var(--phosphor-glow);
+}
+.share-ctrl:hover svg {
+  filter: none;
+}
+.share-ctrl:active {
+  transform: translateY(1px);
+}
+
+.share-ctrl--audio.is-muted {
+  border-color: var(--alert);
+  border-bottom-color: var(--alert);
+  color: var(--alert);
+  animation: blink 1.6s steps(2) infinite;
+}
+.share-ctrl--audio.is-muted svg {
+  filter: drop-shadow(0 0 2px rgba(255, 51, 68, 0.55));
+}
+.share-ctrl--audio.is-muted:hover {
+  background: var(--alert);
+  color: var(--bg-0);
+  border-color: var(--alert);
+  box-shadow: 0 0 10px rgba(255, 51, 68, 0.45);
+  animation: none;
+}
+.share-ctrl--audio.is-muted:hover svg {
+  filter: none;
+}
+
+.share-ctrl--fs.is-on {
+  border-bottom-color: var(--hazard);
+  color: var(--hazard);
+}
+
+/* In native fullscreen, scale the controls up so they feel proportionate
+   to the larger stage and stay readable across the room. */
+.share-stage:fullscreen {
+  background: #000;
+  padding: 0;
+}
+.share-stage:fullscreen .share-controls {
+  padding: 16px 28px;
+  gap: 10px;
+}
+.share-stage:fullscreen .share-ctrl {
+  font-size: 0.78rem;
+  padding: 8px 14px 7px;
+  gap: 8px;
+}
+.share-stage:fullscreen .share-ctrl svg {
+  width: 18px;
+  height: 18px;
 }
 
 .share-idle--connecting .share-idle-mark {
@@ -2698,6 +2911,9 @@ input.input:focus {
   justify-content: center;
   padding: 6px;
 }
+.shell--with-share .share-stage {
+  min-height: min(72vh, 760px);
+}
 
 .share-video {
   display: block;
@@ -2706,6 +2922,9 @@ input.input:focus {
   max-height: 76vh;
   object-fit: contain;
   background: #000;
+}
+.shell--with-share .share-video {
+  max-height: min(82vh, 1100px);
 }
 
 .share-self {
@@ -2801,6 +3020,9 @@ input.input:focus {
   .shell--with-share .layout {
     flex-direction: column;
   }
+  .shell--with-share .console {
+    flex: 1 1 auto;
+  }
   .share-panel {
     flex: 0 0 auto;
     max-width: 100%;
@@ -2809,6 +3031,9 @@ input.input:focus {
   }
   .share-stage {
     min-height: 240px;
+  }
+  .shell--with-share .share-stage {
+    min-height: 280px;
   }
 }
 
@@ -2826,7 +3051,7 @@ input.input:focus {
   .brand h1 {
     font-size: clamp(2rem, 13vw, 3rem);
   }
-  .composer-row .btn,
+  .composer-row .btn:not(.btn--transmit),
   .composer-row .btn-ghost {
     flex: 1;
   }

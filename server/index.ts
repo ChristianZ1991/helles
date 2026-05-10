@@ -644,7 +644,7 @@ async function main() {
           if (now - prev < 1500) return;
           lastAlertAt.set(connId, now);
           const kind = typeof (data as { kind?: unknown }).kind === "string" ? (data as { kind: string }).kind : "alert";
-          broadcastExcept(connId, { event: "alert", from: connId, kind });
+          broadcastExcept(connId, { event: "alert", from: connId, fromLabel: label, kind });
           return;
         }
         if (data.event === "signal") {
