@@ -450,6 +450,138 @@ export function useScreenShare(send: Send, wsOn: boolean): ScreenShareState {
   );
 }
 
+function IconAudioOn() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+      <path d="M3.5 6h2.3L8.6 4v8L5.8 10H3.5z" fill="currentColor" />
+      <path
+        d="M11.2 5.6c1 0.7 1.6 1.7 1.6 2.4 0 0.7-0.6 1.7-1.6 2.4"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconAudioOff() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+      <path d="M3.5 6h2.3L8.6 4v8L5.8 10H3.5z" fill="currentColor" />
+      <path
+        d="M11 6l3 4M14 6l-3 4"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconFsEnter() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+      <path
+        d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+        strokeLinejoin="miter"
+        strokeLinecap="square"
+      />
+    </svg>
+  );
+}
+
+function IconFsExit() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+      <path
+        d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        fill="none"
+        strokeLinejoin="miter"
+        strokeLinecap="square"
+      />
+    </svg>
+  );
+}
+
+function ShareControls(props: {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  stageRef: React.RefObject<HTMLDivElement | null>;
+  isLocalPreview: boolean;
+  muted: boolean;
+  setMuted: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  const { videoRef, stageRef, isLocalPreview, muted, setMuted } = props;
+  const [isFs, setIsFs] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => {
+      setIsFs(document.fullscreenElement === stageRef.current);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, [stageRef]);
+
+  const toggleMute = useCallback(() => {
+    setMuted((m) => !m);
+    // The click that toggles us off-mute counts as the user gesture
+    // autoplay-with-audio needs — re-issue play() so audio actually starts.
+    const v = videoRef.current;
+    v?.play().catch(() => {
+      /* ignore */
+    });
+  }, [setMuted, videoRef]);
+
+  const toggleFs = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (document.fullscreenElement === stage) {
+      void document.exitFullscreen();
+    } else if (stage.requestFullscreen) {
+      void stage.requestFullscreen();
+    }
+  }, [stageRef]);
+
+  return (
+    <div className="share-controls" role="toolbar" aria-label="screen share controls">
+      {isLocalPreview ? (
+        <span className="share-ctrl-idle" aria-hidden>
+          ▮ LOCAL FEED
+        </span>
+      ) : (
+        <button
+          type="button"
+          className={`share-ctrl share-ctrl--audio${muted ? " is-muted" : ""}`}
+          onClick={toggleMute}
+          aria-label={muted ? "enable audio" : "mute audio"}
+          aria-pressed={!muted}
+          title={muted ? "enable audio" : "mute audio"}
+        >
+          {muted ? <IconAudioOff /> : <IconAudioOn />}
+          <span className="share-ctrl-label">{muted ? "MUTED" : "AUDIO"}</span>
+        </button>
+      )}
+      <span className="share-ctrl-spacer" aria-hidden />
+      <button
+        type="button"
+        className={`share-ctrl share-ctrl--fs${isFs ? " is-on" : ""}`}
+        onClick={toggleFs}
+        aria-label={isFs ? "exit fullscreen" : "enter fullscreen"}
+        aria-pressed={isFs}
+        title={isFs ? "exit fullscreen" : "fullscreen"}
+      >
+        {isFs ? <IconFsExit /> : <IconFsEnter />}
+        <span className="share-ctrl-label">{isFs ? "EXIT" : "FULL"}</span>
+      </button>
+    </div>
+  );
+}
+
 export function ShareView(props: {
   isLocalSharing: boolean;
   sharerLabel: string | null;
@@ -461,11 +593,12 @@ export function ShareView(props: {
 }) {
   const { isLocalSharing, sharerLabel, localStream, remoteStream, connState, onStop, error } = props;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   const activeStream = isLocalSharing ? localStream : remoteStream;
   const isLocalPreview = isLocalSharing && !!localStream;
   // Always start muted so autoplay isn't blocked. The viewer can unmute via
-  // a click on the dedicated control (a user gesture is required for audio).
+  // the audio control in the overlay (a user gesture is required for audio).
   const [muted, setMuted] = useState(true);
 
   // Re-mute whenever the underlying stream is replaced (new share session).
@@ -479,7 +612,7 @@ export function ShareView(props: {
     v.srcObject = activeStream;
     if (activeStream) {
       v.play().catch(() => {
-        /* may need a user gesture; the unmute button handles that */
+        /* may need a user gesture; the audio control handles that */
       });
     }
   }, [activeStream]);
@@ -516,7 +649,7 @@ export function ShareView(props: {
           </button>
         ) : null}
       </header>
-      <div className="share-stage">
+      <div className="share-stage" ref={stageRef}>
         {activeStream ? (
           <>
             <video
@@ -532,16 +665,13 @@ export function ShareView(props: {
             {isLocalPreview ? (
               <span className="share-self-badge">▶ LIVE · LOCAL PREVIEW</span>
             ) : null}
-            {!isLocalPreview && muted ? (
-              <button
-                type="button"
-                className="share-unmute"
-                onClick={() => setMuted(false)}
-                title="enable audio"
-              >
-                ▶ UNMUTE
-              </button>
-            ) : null}
+            <ShareControls
+              videoRef={videoRef}
+              stageRef={stageRef}
+              isLocalPreview={isLocalPreview}
+              muted={muted}
+              setMuted={setMuted}
+            />
           </>
         ) : showConnecting ? (
           <div className="share-idle share-idle--connecting">

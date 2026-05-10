@@ -553,6 +553,10 @@ export function App() {
   useEffect(() => {
     shareIngestRef.current = share.ingest;
   }, [share.ingest]);
+  const selfIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selfIdRef.current = share.selfId;
+  }, [share.selfId]);
 
   const onPinVideo = useCallback((url: string) => {
     setPinnedVideoUrl(url.trim());
@@ -670,6 +674,20 @@ export function App() {
         if (data.event === "message" && data.message) mergeMessage(data.message);
         if (data.event === "message_deleted" && typeof data.id === "string") removeMessage(data.id);
         if (data.event === "alert") {
+          // Don't shock yourself. The server's broadcastExcept skips the
+          // sender's connection — but two tabs in the same browser share
+          // a callsign cookie, so tab B would still receive (and play)
+          // tab A's alert. Filter on the user-level label too so any tab
+          // belonging to the operator who sent the alert stays silent.
+          if (typeof data.from === "string" && data.from === selfIdRef.current) {
+            return;
+          }
+          if (
+            typeof data.fromLabel === "string" &&
+            data.fromLabel === user.username
+          ) {
+            return;
+          }
           const kind = typeof data.kind === "string" ? data.kind : "alert";
           if (kind === "ring") {
             playPhoneRing();
@@ -892,7 +910,10 @@ export function App() {
         <div className="orb a" />
         <div className="orb b" />
       </div>
-      <div className={`app-root${pinnedVideoUrl ? " app-root--docked" : ""}`} ref={appLayoutRef}>
+      <div
+        className={`app-root${pinnedVideoUrl ? " app-root--docked" : ""}${share.sharerId ? " app-root--sharing" : ""}`}
+        ref={appLayoutRef}
+      >
         {pinnedVideoUrl ? (
           <aside className="video-dock" style={{ width: dockW }}>
             <div className="video-dock-head">
@@ -1038,36 +1059,49 @@ export function App() {
                       <button
                         type="button"
                         className="icon-btn icon-btn--alert"
-                        onClick={() => sendAlert("ring")}
-                        title="ring others"
-                        aria-label="ring others"
-                        disabled={!wsOn}
-                      >
-                        <span aria-hidden>☎</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn--alert"
                         onClick={() => sendAlert("siren")}
-                        title="siren / shock others"
-                        aria-label="siren others"
+                        title="alert peers"
+                        aria-label="alert peers"
                         disabled={!wsOn}
                       >
                         <span aria-hidden>⚠</span>
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      className={`btn btn--transmit${sending ? " is-sending" : ""}`}
+                      onClick={() => {
+                        sendAlert("tx");
+                        void sendChat();
+                      }}
+                      disabled={sending || (!draft.trim() && attachments.length === 0)}
+                      aria-label={sending ? "sending" : "transmit"}
+                      title={sending ? "sending…" : "transmit"}
+                    >
+                      {sending ? (
+                        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+                          <circle cx="8" cy="8" r="2.4" fill="currentColor">
+                            <animate
+                              attributeName="r"
+                              values="1.6;3.4;1.6"
+                              dur="0.9s"
+                              repeatCount="indefinite"
+                            />
+                            <animate
+                              attributeName="opacity"
+                              values="1;0.45;1"
+                              dur="0.9s"
+                              repeatCount="indefinite"
+                            />
+                          </circle>
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+                          <path d="M3.2 2.4 L13 8 L3.2 13.6 Z" fill="currentColor" />
+                        </svg>
+                      )}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => {
-                      sendAlert("tx");
-                      void sendChat();
-                    }}
-                    disabled={sending || (!draft.trim() && attachments.length === 0)}
-                  >
-                    {sending ? "sending…" : "transmit"}
-                  </button>
                 </div>
                 <div className="composer-foot">
                   <span className="hint">
